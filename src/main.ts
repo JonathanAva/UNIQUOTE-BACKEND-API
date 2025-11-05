@@ -12,8 +12,15 @@ async function bootstrap() {
 
   // 🔐 CORS: habilita CORS para que el frontend (Angular) pueda acceder
   app.enableCors({
-    origin: '*', // o usa una whitelist si prefieres más control
+    origin: [
+      'http://localhost:4200',      // dev
+      'https://app.tu-dominio.com', // prod
+    ],
+    credentials: true,
+    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type','X-XSRF-TOKEN'],
   });
+
 
   // ✅ Logger empresarial (Pino)
   app.useLogger(app.get(PinoLogger));
