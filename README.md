@@ -22,40 +22,63 @@
 
 ## 📘 Descripción
 
-**UNIQUOTE API** es un backend empresarial diseñado para la gestión de usuarios, roles y autenticación segura basada en JWT.
+**UNIQUOTE API** es un backend empresarial diseñado para la gestión de usuarios, roles y autenticación segura basada en JWT.  
+Implementa arquitectura modular, validaciones robustas, documentación con Swagger y seguridad empresarial.
 
-> Framework principal: **NestJS + Prisma + PostgreSQL**
+> **Framework principal:** NestJS + Prisma + PostgreSQL
 
 ---
 
-## 🧱 Tecnologías
+## 🧱 Tecnologías utilizadas
 
-- ⚙️ NestJS
-- 🗄️ PostgreSQL
-- 🔗 Prisma ORM
-- 🔐 JWT + Argon2
-- 🧪 Swagger
-- 🐳 Docker
-- 📦 Pino Logger
+- ⚙️ **NestJS** — Framework modular para Node.js  
+- 🗄️ **PostgreSQL** — Base de datos relacional  
+- 🔗 **Prisma ORM** — ORM moderno y tipado  
+- 🔐 **JWT + Argon2** — Autenticación y cifrado  
+- 🧪 **Swagger** — Documentación interactiva  
+- 🐳 **Docker Compose** — Entornos reproducibles  
+- 📦 **Pino Logger** — Logging estructurado empresarial  
 
 ---
 
 ## 📁 Estructura del Proyecto
 
+```
+src/
+├── common/              # Utilidades, interceptores, pipes
+├── config/              # Configuración global y validación de entorno
+├── infra/               # PrismaService y conexión a base de datos
+├── modules/
+│   ├── auth/            # Autenticación y roles
+│   ├── users/           # CRUD de usuarios
+│   └── roles/           # CRUD de roles
+└── main.ts              # Punto de entrada
+```
 
 ---
 
-## ⚙️ Instalación
+## ⚙️ Instalación y configuración
+
+### 1. Clonar el repositorio
 
 ```bash
 git clone https://github.com/your-org/uniquote-api.git
 cd uniquote-api
+```
+
+### 2. Instalar dependencias
+
+```bash
 npm install
+```
 
-📦 Configuración de entorno
+---
 
-Crea un archivo .env en la raíz:
+## 📦 Configuración de entorno
 
+Crea un archivo **.env** en la raíz del proyecto con las siguientes variables:
+
+```env
 PORT=3000
 DB_HOST=localhost
 DB_PORT=5433
@@ -64,41 +87,163 @@ DB_PASS=123456
 DB_NAME=uniquote_db
 DATABASE_URL="postgresql://uniquote_user:123456@localhost:5433/uniquote_db"
 JWT_SECRET="unaClaveSuperSegura"
+```
 
-🐳 Docker (Base de datos)
+---
 
-Levanta el contenedor PostgreSQL:
+## 🐳 Docker (Base de datos PostgreSQL)
+
+### Levantar contenedor de PostgreSQL
+
+```bash
 docker compose up -d
+```
 
-🧩 Prisma
-Generar cliente
+> Verifica que el puerto 5433 no esté en uso. Si lo está, edita `docker-compose.yml`.
+
+---
+
+## 🧩 Prisma ORM
+
+### Generar el cliente Prisma
+
+```bash
 npx prisma generate
+```
 
-Crear migraciones
+### Crear migración inicial
+
+```bash
 npx prisma migrate dev --name init
+```
 
+### (Opcional) Acceder a la base de datos vía navegador
 
-🚀 Ejecutar el proyecto
-# modo desarrollo
+```bash
+npx prisma studio
+```
+
+---
+
+## 🚀 Ejecutar el proyecto
+
+### Modo desarrollo
+
+```bash
 npm run start:dev
+```
 
+### Modo producción
 
-📦 Scripts útiles
-# Compilar
+```bash
 npm run build
-
-# Producción
 npm run start:prod
+```
 
-# Pruebas
+---
+
+## 📚 Documentación Swagger
+
+Disponible automáticamente en:
+
+📘 [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+
+---
+
+## 🧪 Pruebas
+
+```bash
+# Pruebas unitarias
 npm run test
 
 # Pruebas end-to-end
 npm run test:e2e
 
-# Cobertura
+# Cobertura de pruebas
 npm run test:cov
+```
 
+---
 
+## 🔐 Seguridad implementada
 
+- ✅ Contraseñas cifradas con **Argon2**
+- ✅ Autenticación **JWT**
+- ✅ Protección de rutas con **Guards**
+- ✅ Validaciones con **class-validator + Joi**
+- ✅ Swagger protegido con **BearerAuth**
 
+---
+
+## 🔑 Endpoints principales
+
+### Auth `/auth`
+
+| Método | Ruta         | Descripción              |
+|--------|--------------|--------------------------|
+| POST   | `/auth/login` | Inicia sesión y retorna un token JWT |
+
+### Usuarios `/users`
+
+| Método | Ruta            | Descripción         |
+|--------|------------------|---------------------|
+| POST   | `/users`         | Crear nuevo usuario |
+| GET    | `/users`         | Obtener todos los usuarios |
+| GET    | `/users/:id`     | Obtener usuario por ID |
+| PUT    | `/users/:id`     | Actualizar usuario |
+| DELETE | `/users/:id`     | Eliminar usuario |
+
+### Roles `/roles`
+
+| Método | Ruta            | Descripción       |
+|--------|------------------|-------------------|
+| POST   | `/roles`         | Crear nuevo rol   |
+| GET    | `/roles`         | Obtener todos los roles |
+| GET    | `/roles/:id`     | Obtener rol por ID |
+| PATCH  | `/roles/:id`     | Actualizar rol     |
+| DELETE | `/roles/:id`     | Eliminar rol       |
+
+---
+
+## 🚀 Despliegue
+
+### Opción 1: Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+### Opción 2: Despliegue manual (producción)
+
+```bash
+npm run build
+npm run start:prod
+```
+
+---
+
+## 📚 Recursos recomendados
+
+- [NestJS](https://docs.nestjs.com)
+- [Prisma ORM](https://www.prisma.io/docs)
+- [Swagger](https://swagger.io/tools/swagger-ui/)
+- [Docker](https://docs.docker.com/)
+- [PostgreSQL](https://www.postgresql.org/)
+- [JWT](https://jwt.io/)
+
+---
+
+## 👥 Contribuciones
+
+¿Encontraste un bug o quieres proponer una mejora?  
+Haz un fork, crea una rama y envía un pull request 🚀
+
+---
+
+## 📝 Licencia
+
+Este proyecto está licenciado bajo la **MIT License**.
+
+<p align="center">
+  <strong>© 2025 UNIQUOTE Jonathan Villanueva Emilia Escobar</strong>
+</p>
