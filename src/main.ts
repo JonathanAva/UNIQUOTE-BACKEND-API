@@ -4,6 +4,11 @@ import { SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { swaggerConfig } from './config/swagger.config';
 import { Logger as PinoLogger } from 'nestjs-pino';
+import cookieParser from 'cookie-parser';
+import { DocumentBuilder } from '@nestjs/swagger';
+
+
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -25,7 +30,8 @@ async function bootstrap() {
   // ✅ Logger empresarial (Pino)
   app.useLogger(app.get(PinoLogger));
 
-  // 🔍 Prefijo global para todas las rutas
+
+  app.use(cookieParser());
   app.setGlobalPrefix('api/v1');
 
   // 📦 Validación global

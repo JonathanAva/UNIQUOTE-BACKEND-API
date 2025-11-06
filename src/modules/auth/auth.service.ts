@@ -1,4 +1,3 @@
-// src/modules/auth/auth.service.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/infra/database/prisma.service';
@@ -25,17 +24,23 @@ export class AuthService {
     return user;
   }
 
-  async login(dto: LoginDto) {
-    const user = await this.validateUser(dto.email, dto.password);
+async login(dto: LoginDto) {
+  const user = await this.validateUser(dto.email, dto.password);
 
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role.name,
-    };
+  const payload = {
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+    lastName: user.lastName,
+    phone: user.phone,
+    role: user.role.name,
+  };
 
-    return {
-      accessToken: this.jwtService.sign(payload),
-    };
-  }
+  const accessToken = this.jwtService.sign(payload);
+
+  return {
+    accessToken,
+  };
+}
+
 }

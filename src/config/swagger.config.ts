@@ -2,7 +2,16 @@ import { DocumentBuilder } from '@nestjs/swagger';
 
 export const swaggerConfig = new DocumentBuilder()
   .setTitle('UNIQUOTE API')
-  .setDescription('Endpoints')
+  .setDescription('Documentación de los endpoints')
   .setVersion('1.0')
-  .addBearerAuth()
+  .addBearerAuth(
+    {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      name: 'Authorization',
+      in: 'header',
+    },
+    'jwt',
+  )
   .build();
