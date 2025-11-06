@@ -28,7 +28,7 @@ export class AuthController {
 
   @ApiBearerAuth('jwt') 
   @UseGuards(JwtAuthGuard)
-  @Get('informacion de usuario')
+  @Get('inf')
   @ApiOperation({ summary: 'Obtener información del usuario autenticado' })
   @ApiOkResponse({ description: 'Devuelve los datos del usuario logueado' })
   async me(@Req() req: Request) {

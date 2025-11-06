@@ -9,8 +9,8 @@ export const swaggerConfig = new DocumentBuilder()
       type: 'http',
       scheme: 'bearer',
       bearerFormat: 'JWT',
-      name: 'Authorization',
       in: 'header',
+      name: 'Authorization',
     },
     'jwt',
   )
