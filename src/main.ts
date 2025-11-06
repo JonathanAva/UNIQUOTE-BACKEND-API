@@ -1,11 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { SwaggerModule } from '@nestjs/swagger';
+import {DocumentBuilder,SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { swaggerConfig } from './config/swagger.config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import cookieParser from 'cookie-parser';
-import { DocumentBuilder } from '@nestjs/swagger';
+
 
 
 
@@ -27,7 +27,6 @@ async function bootstrap() {
   });
 
 
-  // ✅ Logger empresarial (Pino)
   app.useLogger(app.get(PinoLogger));
 
 
@@ -43,11 +42,19 @@ async function bootstrap() {
     }),
   );
 
-  // 📚 Swagger solo en entorno local/dev
-  if (process.env.NODE_ENV !== 'production') {
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api', app, document);
-  }
+if (process.env.NODE_ENV !== 'production') {
+  const config = new DocumentBuilder()
+    .setTitle('Uniquote API')
+    .setDescription('Documentación de endpoints')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+
+  const doc = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, doc, {
+    swaggerOptions: { persistAuthorization: true },
+  });
+}
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
