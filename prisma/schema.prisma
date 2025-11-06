@@ -1,83 +1,59 @@
-  // This is your Prisma schema file,
-  // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-  generator client {
+generator client {
   provider = "prisma-client-js"
-  // sin output
 }
 
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-  model Role {
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
-    id        Int      @id @default(autoincrement())
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  lastName  String
+  email     String   @unique
+  phone     String
+  password  String
+  roleId    Int
+  role      Role     @relation(fields: [roleId], references: [id])
+  mfaLastVerifiedAt DateTime?
 
-    name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    users     User[]
+  emailOtps EmailOtp[]
+}
 
-    createdAt DateTime @default(now())
+model Cliente {
+  id          Int      @id @default(autoincrement())
+  empresa     String
+  razonSocial String
+  contacto    String
+  email       String   @unique
+  telefono    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-    updatedAt DateTime @updatedAt
+  @@index([empresa])
+  @@unique([empresa, razonSocial])
+}
 
-  }
+model EmailOtp {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String   
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 
-
-
-  model User {
-
-    id        Int      @id @default(autoincrement())
-
-    name      String
-
-    lastName  String
-
-    email     String   @unique
-
-    phone     String
-
-    password  String
-
-    roleId    Int
-
-    role      Role     @relation(fields: [roleId], references: [id])
-
-    createdAt DateTime @default(now())
-
-    updatedAt DateTime @updatedAt
-
-  }
-
-
-
-  model Cliente {
-
-    id             Int       @id @default(autoincrement())
-
-    empresa        String    // nombre de la empresa
-
-    razonSocial    String    // razón social
-
-    contacto       String    // nombre de contacto
-
-    email          String    @unique // correo electrónico
-
-    telefono       String
-
-    createdAt      DateTime  @default(now())
-
-    updatedAt      DateTime  @updatedAt
-
-
-
-    @@index([empresa])
-
-    @@unique([empresa, razonSocial]) // evita duplicados empresa+razón social
-
-  }
+  @@index([userId])
+  @@index([expiresAt])
+}

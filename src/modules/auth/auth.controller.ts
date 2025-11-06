@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import { LoginDto } from './dto/login.dto';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -26,7 +27,21 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
-  @ApiBearerAuth('jwt') 
+  @Post('verify-email-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar código de inicio de sesión enviado por email' })
+  async verifyEmailCode(@Body() dto: VerifyEmailCodeDto) {
+    return this.authService.verifyEmailCode(dto);
+  }
+
+  @Post('resend-email-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reenviar código de verificación por email' })
+  async resendEmailCode(@Body('email') email: string) {
+    return this.authService.resendEmailCode(email);
+  }
+
+  @ApiBearerAuth('jwt')
   @UseGuards(JwtAuthGuard)
   @Get('inf')
   @ApiOperation({ summary: 'Obtener información del usuario autenticado' })
