@@ -9,6 +9,7 @@ type JwtPayload = {
   name: string;
   lastName: string;
   phone: string;
+  roleId: number;
   role: string;
 };
 
@@ -18,7 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
-        (req) => req?.cookies?.access_token, // opcional: si un día sirves JWT en cookie
+        (req) => req?.cookies?.access_token, // opcional si guardas el token en cookie
       ]),
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('jwt.secret'),
@@ -26,13 +27,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload) {
-    // Lo que devuelvas aquí se asigna a req.user
+
     return {
       id: payload.sub,
       email: payload.email,
       name: payload.name,
       lastName: payload.lastName,
       phone: payload.phone,
+      roleId: payload.roleId,
       role: payload.role,
     };
   }

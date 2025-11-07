@@ -8,6 +8,8 @@ import { validationSchema } from './config/validation';
 import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ClientesModule } from './modules/clients/clientes.module';
+import { ContactosModule } from './modules/contactos/contactos.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { AuthModule } from './modules/auth/auth.module';
     UsersModule,
     RolesModule,
     AuthModule, 
+    ClientesModule,
+    ContactosModule,
   ],
 })
 export class AppModule {}

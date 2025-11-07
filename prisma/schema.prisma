@@ -36,21 +36,35 @@ model Cliente {
   id          Int      @id @default(autoincrement())
   empresa     String
   razonSocial String
-  contacto    String
-  email       String   @unique
-  telefono    String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // relación 1:N
+  contactos   ContactoEmpresa[]
+
   @@index([empresa])
   @@unique([empresa, razonSocial])
+}
+
+model ContactoEmpresa {
+  id         Int      @id @default(autoincrement())
+  clienteId  Int
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  nombre     String
+  email      String   @unique       // si quieres único por cliente, ver nota abajo
+  telefono   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([clienteId])
 }
 
 model EmailOtp {
   id         Int      @id @default(autoincrement())
   userId     Int
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash   String   
+  codeHash   String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 

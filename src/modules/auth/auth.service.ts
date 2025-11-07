@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+// src/modules/auth/auth.service.ts
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/infra/database/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -6,15 +11,15 @@ import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import * as argon2 from 'argon2';
 import { MailerService } from '@/shared/mailer/mailer.service';
 import { ConfigService } from '@nestjs/config';
-import crypto from 'crypto';
+import { randomInt } from 'node:crypto';
 
 const MINUTES = (n: number) => n * 60 * 1000;
 const DAYS = (n: number) => n * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
-  private mfaTtlMin: number;
-  private mfaWindowDays: number;
+  private readonly mfaTtlMin: number;
+  private readonly mfaWindowDays: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -26,27 +31,14 @@ export class AuthService {
     this.mfaWindowDays = parseInt(this.config.get<string>('MFA_WINDOW_DAYS') ?? '29', 10);
   }
 
-  async validateUser(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: { role: true },
-    });
-
-    if (!user || !(await argon2.verify(user.password, password))) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
-
-    return user;
-  }
-
+  // --- Helpers ---
   private needsMfa(lastVerifiedAt?: Date | null): boolean {
     if (!lastVerifiedAt) return true;
-    const now = Date.now();
-    return now - lastVerifiedAt.getTime() > DAYS(this.mfaWindowDays);
+    return Date.now() - lastVerifiedAt.getTime() > DAYS(this.mfaWindowDays);
   }
 
-  private generateNumericCode(length = 6) {
-    const n = crypto.randomInt(0, 10 ** length);
+  private generateNumericCode(length = 6): string {
+    const n = randomInt(0, 10 ** length);
     return n.toString().padStart(length, '0');
   }
 
@@ -64,20 +56,40 @@ export class AuthService {
 
     const html = this.mailer.buildOtpEmail(code, this.mfaTtlMin);
     await this.mailer.sendEmail(email, 'Código de verificación', html);
-
-    return true;
   }
 
-  private signAccessToken(user: any) {
+  private signAccessToken(user: {
+    id: number;
+    email: string;
+    name: string;
+    lastName: string;
+    phone: string;
+    roleId: number;
+    role: { name: string };
+  }): string {
     const payload = {
       sub: user.id,
       email: user.email,
       name: user.name,
       lastName: user.lastName,
       phone: user.phone,
-      role: user.role.name,
+      roleId: user.roleId,     
+      role: user.role.name,   
     };
     return this.jwtService.sign(payload);
+  }
+
+  // --- Public API ---
+  async validateUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { role: true },
+    });
+
+    if (!user || !(await argon2.verify(user.password, password))) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    return user;
   }
 
   // LOGIN: si requiere MFA, envía OTP y no devuelve token
@@ -115,7 +127,6 @@ export class AuthService {
     const ok = await argon2.verify(record.codeHash, dto.code);
     if (!ok) throw new BadRequestException('Código inválido');
 
-    // éxito: marca la fecha de verificación MFA y limpia códigos
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: user.id },
@@ -128,10 +139,11 @@ export class AuthService {
     return { accessToken };
   }
 
-  // REENVIAR OTP
+  
   async resendEmailCode(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new UnauthorizedException('Usuario no encontrado');
+
     await this.createAndSendOtp(user.id, user.email);
     return { sent: true };
   }
