@@ -29,7 +29,7 @@ import type { Request } from 'express';
 @ApiTags('Cotizaciones')
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RoleIdsGuard)
-// Misma lógica de roles que para proyectos (ajústala si quieres)
+// Misma lógica de roles que para proyectos 
 @RoleIds(1, 2, 3)
 @Controller('cotizaciones')
 export class CotizacionesController {
