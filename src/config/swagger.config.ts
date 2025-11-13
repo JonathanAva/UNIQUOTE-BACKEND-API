@@ -1,9 +1,11 @@
 import { DocumentBuilder } from '@nestjs/swagger';
 
+// Configuración base para la documentación Swagger de la API
 export const swaggerConfig = new DocumentBuilder()
-  .setTitle('UNIQUOTE API')
-  .setDescription('Documentación de los endpoints')
-  .setVersion('2.0')
+  .setTitle('UNIQUOTE API') // Título visible en Swagger UI
+  .setDescription('Documentación de los endpoints') // Descripción general
+  .setVersion('2.0') // Versión de la API
+  // Definición del esquema de seguridad tipo Bearer JWT
   .addBearerAuth(
     {
       type: 'http',
@@ -12,6 +14,6 @@ export const swaggerConfig = new DocumentBuilder()
       in: 'header',
       name: 'Authorization',
     },
-    'jwt',
+    'jwt', // nombre del esquema, se usa en @ApiBearerAuth('jwt')
   )
   .build();

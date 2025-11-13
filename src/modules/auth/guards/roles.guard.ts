@@ -1,6 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
+// Guard que usa la metadata 'roleIds' para restringir acceso por roleId.
+// Es funcionalmente igual al de role-id.guard.ts en este proyecto.
 @Injectable()
 export class RoleIdsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}

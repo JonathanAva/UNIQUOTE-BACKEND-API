@@ -11,8 +11,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ClientesModule } from './modules/clients/clientes.module';
 import { ContactosModule } from './modules/contactos/contactos.module';
 
+// Módulo raíz que importa y compone todos los demás módulos de la app
 @Module({
   imports: [
+    // Logger estructurado usando pino
     LoggerModule.forRoot({
       pinoHttp: {
         transport: {
@@ -25,14 +27,16 @@ import { ContactosModule } from './modules/contactos/contactos.module';
         },
       },
     }),
+    // Módulo de configuración global (variables de entorno)
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
       validationSchema,
     }),
+    // Módulos de negocio
     UsersModule,
     RolesModule,
-    AuthModule, 
+    AuthModule,
     ClientesModule,
     ContactosModule,
   ],

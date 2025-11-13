@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
 import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
 
+// Endpoints para gestionar contactos de empresas (clientes)
 @ApiTags('Contactos')
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RoleIdsGuard)
@@ -36,6 +37,7 @@ export class ContactosController {
   @ApiOperation({ summary: 'Listar contactos por cliente' })
   @ApiQuery({ name: 'clienteId', type: Number, required: true })
   findAllByCliente(@Query('clienteId') clienteId: number) {
+    // Se fuerza a number por si viene como string en la query
     return this.service.findAllByCliente(Number(clienteId));
   }
 

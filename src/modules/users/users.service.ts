@@ -10,10 +10,12 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import * as argon2 from 'argon2';
 
 @Injectable()
+// Servicio que contiene la lógica de negocio para usuarios
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: CreateUserDto) {
+    // Verifica si ya existe un usuario con ese email
     const existingUser = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -22,6 +24,7 @@ export class UsersService {
       throw new ConflictException('El correo electrónico ya está registrado');
     }
 
+    // Hashea la contraseña antes de guardar
     const hashedPassword = await argon2.hash(data.password);
 
     try {
@@ -43,11 +46,13 @@ export class UsersService {
         },
       });
     } catch (error) {
+      // Manejo genérico de errores de base de datos
       throw new InternalServerErrorException('Error al crear el usuario');
     }
   }
 
   async findAll() {
+    // Lista todos los usuarios con su rol asociado
     return this.prisma.user.findMany({
       select: {
         id: true,
@@ -64,6 +69,7 @@ export class UsersService {
   }
 
   async findOne(id: number) {
+    // Busca un usuario por ID con rol
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -87,10 +93,12 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
+    // Si viene nueva contraseña, se hashea antes de guardar
     if (data.password) {
       data.password = await argon2.hash(data.password);
     }
 
+    // Actualiza y devuelve datos clave
     return this.prisma.user.update({
       where: { id },
       data,
@@ -112,6 +120,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
+    // Elimina el registro de usuario
     return this.prisma.user.delete({
       where: { id },
     });

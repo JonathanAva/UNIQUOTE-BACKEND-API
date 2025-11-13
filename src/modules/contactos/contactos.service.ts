@@ -8,6 +8,7 @@ import { CreateContactoDto } from './dto/create-contacto.dto';
 import { UpdateContactoDto } from './dto/update-contacto.dto';
 
 @Injectable()
+// Servicio con lógica de negocio de contactos de empresa
 export class ContactosService {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -26,6 +27,7 @@ export class ContactosService {
     });
     if (dupEmail) throw new ConflictException('El correo ya está registrado');
 
+    // Crea el contacto asociado al cliente indicado
     const created = await this.prisma.contactoEmpresa.create({
       data: {
         clienteId: Number(dto.clienteId),
@@ -46,7 +48,7 @@ export class ContactosService {
   }
 
   async findAllByCliente(clienteId: number) {
-    // opcional: validar existencia del cliente
+    // Lista todos los contactos de un cliente específico
     return this.prisma.contactoEmpresa.findMany({
       where: { clienteId },
       orderBy: { createdAt: 'desc' },
@@ -63,6 +65,7 @@ export class ContactosService {
   }
 
   async findOne(id: number) {
+    // Obtiene datos de un contacto por ID
     const c = await this.prisma.contactoEmpresa.findUnique({
       where: { id },
       select: {
@@ -101,6 +104,7 @@ export class ContactosService {
       if (!cliente) throw new NotFoundException('Cliente destino no existe');
     }
 
+    // Aplica la actualización
     return this.prisma.contactoEmpresa.update({
       where: { id },
       data: dto,

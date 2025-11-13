@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
 
+// Test básico que verifica que el servicio se crea correctamente
 describe('UsersService', () => {
   let service: UsersService;
 
@@ -9,7 +10,7 @@ describe('UsersService', () => {
       providers: [UsersService],
     }).compile();
 
-    service = module.get<UsersService>(UsersService);
+      service = module.get<UsersService>(UsersService);
   });
 
   it('should be defined', () => {

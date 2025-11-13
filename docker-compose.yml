@@ -1,20 +1,18 @@
-
-
 services:
   postgres:
-    image: postgres:15
-    restart: always
+    image: postgres:15              # Imagen de PostgreSQL versión 15
+    restart: always                 # Reinicia el contenedor si se cae
     container_name: uniquote_postgres
     environment:
-      POSTGRES_USER: uniquote_user
-      POSTGRES_PASSWORD: 123456     
-      POSTGRES_DB: uniquote_db
+      POSTGRES_USER: uniquote_user          # Usuario de BD
+      POSTGRES_PASSWORD: 123456             # Contraseña de BD
+      POSTGRES_DB: uniquote_db              # Nombre de la base de datos por defecto
       PGUSER: postgres
-      POSTGRES_HOST_AUTH_METHOD: md5  
+      POSTGRES_HOST_AUTH_METHOD: md5        # Método de autenticación
     ports:
-      - '5433:5432'
+      - '5433:5432'                 # Expone puerto 5432 del contenedor en el 5433 local
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data  # Persistencia de datos de PostgreSQL
 
 volumes:
-  postgres_data:
+  postgres_data:                     # Volumen Docker para almacenar los datos de la BD

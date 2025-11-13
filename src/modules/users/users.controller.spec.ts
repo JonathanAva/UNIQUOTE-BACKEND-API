@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 
+// Test básico que verifica que el controller se construye correctamente
 describe('UsersController', () => {
   let controller: UsersController;
 

@@ -6,10 +6,12 @@ import { swaggerConfig } from './config/swagger.config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import cookieParser from 'cookie-parser';
 
+// Punto de entrada principal de la aplicación NestJS
 async function bootstrap() {
+  // Crea la app con soporte de logs bufferizados (para pino)
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  // CORS (dev) permitiendo Authorization
+  // Configuración de CORS (entorno dev) permitiendo Authorization
   app.enableCors({
     origin: ['http://localhost:4200', 'http://localhost:3000'],
     credentials: true,
@@ -17,20 +19,22 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
   });
 
+  // Se usa el logger de pino integrado
   app.useLogger(app.get(PinoLogger));
+  // Middleware para parsear cookies en requests
   app.use(cookieParser());
 
-  // Prefijo global
+  // Prefijo global para todos los endpoints (api/v1/...)
   app.setGlobalPrefix('api/v1');
 
-  // Validación global
+  // Validación global de DTOs
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
+    whitelist: true,            // ignora propiedades no definidas en DTO
+    forbidNonWhitelisted: true, // lanza error si vienen propiedades extra
+    transform: true,            // transforma tipos (por ejemplo string -> number)
   }));
 
-  // Swagger con el esquema "jwt" y respetando el prefijo global
+  // Configura Swagger solo en entornos no productivos
   if (process.env.NODE_ENV !== 'production') {
     const document = SwaggerModule.createDocument(app, swaggerConfig, {
       ignoreGlobalPrefix: false,

@@ -8,6 +8,7 @@ import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
 
 @Injectable()
+// Servicio que contiene la lógica de negocio para Clientes
 export class ClientesService {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -21,6 +22,7 @@ export class ClientesService {
       throw new ConflictException('Ya existe un cliente con esa empresa y razón social');
     }
 
+    // Crea el cliente y devuelve campos clave
     return this.prisma.cliente.create({
       data: dto,
       select: {
@@ -33,6 +35,7 @@ export class ClientesService {
   }
 
   async findAll() {
+    // Lista todos los clientes ordenados por creación (recientes primero)
     return this.prisma.cliente.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
@@ -46,6 +49,7 @@ export class ClientesService {
   }
 
   async findOne(id: number) {
+    // Busca cliente por ID
     const c = await this.prisma.cliente.findUnique({
       where: { id },
       select: {
@@ -61,9 +65,11 @@ export class ClientesService {
   }
 
   async update(id: number, dto: UpdateClienteDto) {
+    // Verifica que el cliente exista
     const exists = await this.prisma.cliente.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Cliente no encontrado');
 
+    // Si se modifica empresa o razón social, valida unicidad combinada
     if ((dto.empresa && dto.empresa !== exists.empresa) ||
         (dto.razonSocial && dto.razonSocial !== exists.razonSocial)) {
       const dup = await this.prisma.cliente.findFirst({
@@ -79,6 +85,7 @@ export class ClientesService {
       }
     }
 
+    // Actualiza campos y devuelve los más relevantes
     return this.prisma.cliente.update({
       where: { id },
       data: dto,
@@ -95,6 +102,7 @@ export class ClientesService {
     const exists = await this.prisma.cliente.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Cliente no encontrado');
 
+    // Elimina el registro de Cliente
     await this.prisma.cliente.delete({ where: { id } });
     return { deleted: true };
   }

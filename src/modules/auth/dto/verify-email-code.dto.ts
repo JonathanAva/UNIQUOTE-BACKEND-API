@@ -1,14 +1,20 @@
-import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, Length } from 'class-validator';
 
+// DTO para validar el código de verificación enviado por correo (MFA)
 export class VerifyEmailCodeDto {
-  @ApiProperty({ example: 'user@example.com' })
+  @ApiProperty({
+    example: 'usuario@empresa.com',
+    description: 'Correo con el que el usuario inició sesión',
+  })
   @IsEmail()
-  email: string;
+  email: string; // email del usuario al que se le envió el código
 
-  @ApiProperty({ example: '123456' })
+  @ApiProperty({
+    example: '123456',
+    description: 'Código numérico de 6 dígitos enviado al correo',
+  })
   @IsString()
-  @IsNotEmpty()
   @Length(6, 6)
-  code: string;
+  code: string; // código OTP ingresado por el usuario
 }

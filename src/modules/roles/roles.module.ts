@@ -3,6 +3,7 @@ import { RolesService } from './roles.service';
 import { RolesController } from './roles.controller';
 import { PrismaService } from '@/infra/database/prisma.service';
 
+// Módulo para gestión de roles
 @Module({
   controllers: [RolesController],
   providers: [RolesService, PrismaService],

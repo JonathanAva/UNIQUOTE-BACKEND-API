@@ -5,6 +5,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
 @Injectable()
+// Servicio de acceso a datos y lógica básica de Roles
 export class RolesService {
   constructor(private readonly prisma: PrismaService) {}
 

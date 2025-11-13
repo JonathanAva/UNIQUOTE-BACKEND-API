@@ -1,3 +1,4 @@
+// src/modules/auth/auth.controller.ts
 import {
   Controller,
   Post,
@@ -5,35 +6,57 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Res,
   Get,
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { VerifyEmailCodeRequestDto } from './dto/verify-email-code-request.dto';
 import { LoginDto } from './dto/login.dto';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiOkResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { type Request } from 'express';
+import type { Request, Response } from 'express';
 
+// Grupo de endpoints relacionados a autenticación
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Endpoint de login (email + contraseña)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión con email y contraseña' })
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Delegamos toda la lógica de login/mfa al servicio
+    return this.authService.login(dto, req, res);
   }
 
+  // Endpoint para verificar el código de email (MFA)
   @Post('verify-email-code')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verificar código de inicio de sesión enviado por email' })
-  async verifyEmailCode(@Body() dto: VerifyEmailCodeDto) {
-    return this.authService.verifyEmailCode(dto);
+  @ApiOperation({
+    summary: 'Verificar código de inicio de sesión enviado por email',
+  })
+  async verifyEmailCode(
+    @Body() dto: VerifyEmailCodeRequestDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.authService.verifyEmailCode(dto, req, res);
   }
 
+  // Endpoint para reenviar el código de verificación al email
   @Post('resend-email-code')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reenviar código de verificación por email' })
@@ -41,12 +64,14 @@ export class AuthController {
     return this.authService.resendEmailCode(email);
   }
 
+  // Endpoint para obtener la info del usuario autenticado (basada en el token)
   @ApiBearerAuth('jwt')
   @UseGuards(JwtAuthGuard)
   @Get('inf')
   @ApiOperation({ summary: 'Obtener información del usuario autenticado' })
   @ApiOkResponse({ description: 'Devuelve los datos del usuario logueado' })
   async me(@Req() req: Request) {
+    // req.user es llenado por JwtStrategy.validate()
     return req.user;
   }
 }

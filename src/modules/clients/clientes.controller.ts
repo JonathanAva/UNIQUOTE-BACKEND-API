@@ -17,10 +17,12 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
 import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
 
+// Grupo de endpoints para gestión de clientes (empresas)
 @ApiTags('Clientes')
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RoleIdsGuard)
-@RoleIds(1, 2, 3) 
+// Solo roles con IDs 1,2,3 pueden acceder a estos endpoints
+@RoleIds(1, 2, 3)
 @Controller('clientes')
 export class ClientesController {
   constructor(private readonly service: ClientesService) {}

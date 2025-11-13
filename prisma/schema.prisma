@@ -16,20 +16,21 @@ model Role {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  lastName  String
-  email     String   @unique
-  phone     String
-  password  String
-  roleId    Int
-  role      Role     @relation(fields: [roleId], references: [id])
+  id                Int       @id @default(autoincrement())
+  name              String
+  lastName          String
+  email             String    @unique
+  phone             String
+  password          String
+  roleId            Int
+  role              Role      @relation(fields: [roleId], references: [id])
   mfaLastVerifiedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  emailOtps EmailOtp[]
+  emailOtps      EmailOtp[]
+  trustedDevices TrustedDevice[] // ✅ inverso requerido para TrustedDevice
 }
 
 model Cliente {
@@ -40,34 +41,52 @@ model Cliente {
   updatedAt   DateTime @updatedAt
 
   // relación 1:N
-  contactos   ContactoEmpresa[]
+  contactos ContactoEmpresa[]
 
-  @@index([empresa])
   @@unique([empresa, razonSocial])
+  @@index([empresa])
 }
 
 model ContactoEmpresa {
-  id         Int      @id @default(autoincrement())
-  clienteId  Int
-  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  id        Int     @id @default(autoincrement())
+  clienteId Int
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
-  nombre     String
-  email      String   @unique       // si quieres único por cliente, ver nota abajo
-  telefono   String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  nombre String
+  email  String @unique // opción A: único global
+  // Si prefieres único por empresa (opción B):
+  // @@unique([clienteId, email])
+
+  telefono  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([clienteId])
 }
 
 model EmailOtp {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash   String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TrustedDevice {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId     String
+  lastVerified DateTime
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, deviceId])
   @@index([userId])
   @@index([expiresAt])
 }

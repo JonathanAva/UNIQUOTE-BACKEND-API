@@ -1,6 +1,7 @@
 import { IsEmail, IsInt, IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+// DTO para crear usuarios
 export class CreateUserDto {
   @ApiProperty({
     description: 'Nombre del usuario',

@@ -3,12 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import nodemailer from 'nodemailer';
 
 @Injectable()
+// Servicio encargado de enviar correos usando Nodemailer
 export class MailerService {
   private transporter: nodemailer.Transporter;
   private from: string;
   private readonly logger = new Logger(MailerService.name);
 
   constructor(private readonly config: ConfigService) {
+    // Lectura de configuración SMTP desde variables de entorno
     const host = this.config.get<string>('SMTP_HOST');
     const port = parseInt(this.config.get<string>('SMTP_PORT') ?? '587', 10);
     const secure = (this.config.get<string>('SMTP_SECURE') ?? 'false') === 'true';
@@ -18,21 +20,23 @@ export class MailerService {
     // Si no especificas EMAIL_FROM, usa el mismo del usuario autenticado
     this.from = this.config.get<string>('EMAIL_FROM') || user || 'no-reply@example.com';
 
+    // Crea el transport de Nodemailer
     this.transporter = nodemailer.createTransport({
       host,
       port,
       secure,                         // true para 465, false para 587
-      auth: { user, pass },           // <- obligatorio
+      auth: { user, pass },           // Credenciales SMTP
       logger: true,                   // logs de nodemailer en consola
       debug: true,                    // más detalle en consola
       requireTLS: !secure,            // fuerza STARTTLS si va por 587
       tls: {
-        // En dev a veces conviene permitir self-signed; en prod quítalo
+        // En dev a veces conviene permitir self-signed; en prod se recomienda quitarlo
         rejectUnauthorized: false,
       },
     });
   }
 
+  // Envía un correo HTML al destinatario indicado
   async sendEmail(to: string, subject: string, html: string) {
     try {
       // opcional: verifica conexión/credenciales antes de enviar
@@ -51,6 +55,7 @@ export class MailerService {
     }
   }
 
+  // Construye el template HTML del correo que contiene el código OTP
   buildOtpEmail(code: string, minutes: number) {
     return `
       <div style="font-family:Arial,Helvetica,sans-serif">
