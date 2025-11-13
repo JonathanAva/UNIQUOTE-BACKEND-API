@@ -22,8 +22,7 @@
 
 ## 📘 Descripción
 
-**UNIQUOTE API** es un backend empresarial diseñado para la gestión de usuarios, roles y autenticación segura basada en JWT.  
-Implementa arquitectura modular, validaciones robustas, documentación con Swagger y seguridad empresarial.
+**UNIQUOTE API** es un backend empresarial diseñado para la gestión de usuarios, roles y autenticación segura basada en JWT.Implementa arquitectura modular, validaciones robustas, documentación con Swagger y seguridad empresarial.
 
 > **Framework principal:** NestJS + Prisma + PostgreSQL
 
@@ -31,13 +30,13 @@ Implementa arquitectura modular, validaciones robustas, documentación con Swagg
 
 ## 🧱 Tecnologías utilizadas
 
-- ⚙️ **NestJS** — Framework modular para Node.js  
-- 🗄️ **PostgreSQL** — Base de datos relacional  
-- 🔗 **Prisma ORM** — ORM moderno y tipado  
-- 🔐 **JWT + Argon2** — Autenticación y cifrado  
-- 🧪 **Swagger** — Documentación interactiva  
-- 🐳 **Docker Compose** — Entornos reproducibles  
-- 📦 **Pino Logger** — Logging estructurado empresarial  
+- ⚙️ **NestJS** — Framework modular para Node.js
+- 🗄️ **PostgreSQL** — Base de datos relacional
+- 🔗 **Prisma ORM** — ORM moderno y tipado
+- 🔐 **JWT + Argon2** — Autenticación y cifrado
+- 🧪 **Swagger** — Documentación interactiva
+- 🐳 **Docker Compose** — Entornos reproducibles
+- 📦 **Pino Logger** — Logging estructurado empresarial
 
 ---
 
@@ -79,14 +78,39 @@ npm install
 Crea un archivo **.env** en la raíz del proyecto con las siguientes variables:
 
 ```env
-PORT=3000
+# Parámetros de conexión a la base de datos PostgreSQL
 DB_HOST=localhost
 DB_PORT=5433
 DB_USER=uniquote_user
 DB_PASS=123456
 DB_NAME=uniquote_db
+
+# URL completa de conexión (usada por Prisma)
 DATABASE_URL="postgresql://uniquote_user:123456@localhost:5433/uniquote_db"
-JWT_SECRET="unaClaveSuperSegura"
+
+# Puerto HTTP donde corre la API NestJS
+PORT=3000
+
+# Clave secreta para firmar JWT
+JWT_SECRET="esomar@uniquote1291"
+
+# Dirección de correo que se usará como remitente en los correos enviados
+EMAIL_FROM="jonathan.villanueva1@catolica.edu.sv"
+
+# Configuración de servidor SMTP (Gmail en este caso)
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT=465           # 465 se usa comúnmente con SSL/TLS directo
+SMTP_SECURE=true        # true indica uso de conexión segura
+
+SMTP_USER="jonathan.villanueva1@catolica.edu.sv"
+SMTP_PASS="wxeyxgzylkxapbsd"  # Contraseña de aplicación de Gmail
+
+# Tiempo de vida del código MFA en minutos
+MFA_CODE_TTL_MIN=10
+
+# Cantidad de días que un dispositivo es considerado confiable (para no pedir MFA)
+MFA_WINDOW_DAYS=29
+
 ```
 
 ---
@@ -179,29 +203,29 @@ npm run test:cov
 
 ### Auth `/auth`
 
-| Método | Ruta         | Descripción              |
-|--------|--------------|--------------------------|
-| POST   | `/auth/login` | Inicia sesión y retorna un token JWT |
+| Método | Ruta            | Descripción                          |
+| ------- | --------------- | ------------------------------------- |
+| POST    | `/auth/login` | Inicia sesión y retorna un token JWT |
 
 ### Usuarios `/users`
 
-| Método | Ruta            | Descripción         |
-|--------|------------------|---------------------|
-| POST   | `/users`         | Crear nuevo usuario |
-| GET    | `/users`         | Obtener todos los usuarios |
-| GET    | `/users/:id`     | Obtener usuario por ID |
-| PUT    | `/users/:id`     | Actualizar usuario |
-| DELETE | `/users/:id`     | Eliminar usuario |
+| Método | Ruta           | Descripción               |
+| ------- | -------------- | -------------------------- |
+| POST    | `/users`     | Crear nuevo usuario        |
+| GET     | `/users`     | Obtener todos los usuarios |
+| GET     | `/users/:id` | Obtener usuario por ID     |
+| PUT     | `/users/:id` | Actualizar usuario         |
+| DELETE  | `/users/:id` | Eliminar usuario           |
 
 ### Roles `/roles`
 
-| Método | Ruta            | Descripción       |
-|--------|------------------|-------------------|
-| POST   | `/roles`         | Crear nuevo rol   |
-| GET    | `/roles`         | Obtener todos los roles |
-| GET    | `/roles/:id`     | Obtener rol por ID |
-| PATCH  | `/roles/:id`     | Actualizar rol     |
-| DELETE | `/roles/:id`     | Eliminar rol       |
+| Método | Ruta           | Descripción            |
+| ------- | -------------- | ----------------------- |
+| POST    | `/roles`     | Crear nuevo rol         |
+| GET     | `/roles`     | Obtener todos los roles |
+| GET     | `/roles/:id` | Obtener rol por ID      |
+| PATCH   | `/roles/:id` | Actualizar rol          |
+| DELETE  | `/roles/:id` | Eliminar rol            |
 
 ---
 
@@ -235,7 +259,7 @@ npm run start:prod
 
 ## 👥 Contribuciones
 
-¿Encontraste un bug o quieres proponer una mejora?  
+¿Encontraste un bug o quieres proponer una mejora?
 Haz un fork, crea una rama y envía un pull request 🚀
 
 ---
