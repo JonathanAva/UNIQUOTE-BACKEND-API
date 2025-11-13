@@ -10,6 +10,10 @@ import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ClientesModule } from './modules/clients/clientes.module';
 import { ContactosModule } from './modules/contactos/contactos.module';
+import { ProjectsModule } from './modules/projects/projects.module';
+import { CotizacionesModule } from './modules/cotizaciones/cotizaciones.module';
+
+
 
 // Módulo raíz que importa y compone todos los demás módulos de la app
 @Module({
@@ -39,6 +43,8 @@ import { ContactosModule } from './modules/contactos/contactos.module';
     AuthModule,
     ClientesModule,
     ContactosModule,
+    ProjectsModule,
+    CotizacionesModule,
   ],
 })
 export class AppModule {}
