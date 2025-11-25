@@ -10,10 +10,12 @@
 //  - Encuestadores y supervisores
 //  - Días campo Encuest
 //  - Viáticos, Transporte Microbus y Hotel (precios unitarios fijos)
+//  - Precio de boleta
+//  - Totales de viáticos, transporte, hotel
+//  - Pago encuestadores y pago supervisores
 //
-// Esta capa es intencionalmente "pura TypeScript":
-// no depende de Nest, Prisma, ni HTTP. Recibe parámetros,
-// calcula y devuelve estructuras de datos.
+// Esta capa es "pura TypeScript": no depende de Nest, Prisma ni HTTP.
+// Recibe parámetros, calcula y devuelve estructuras de datos.
 
 export type DepartamentoNacional =
   | 'Ahuachapán'
@@ -35,8 +37,8 @@ interface DepartamentoConfig {
   nombre: DepartamentoNacional;
 
   // Porcentajes de la tabla NACIONAL (urbano/rural).
-  // Se calibran en base a la tabla de 1050 entrevistas
-  // para reproducir exactamente los enteros del Excel.
+  // Se calibran en base a la tabla de 1050 entrevistas para
+  // reproducir los enteros de la hoja Excel original.
   pctUrbano: number;
   pctRural: number;
 
@@ -55,15 +57,12 @@ interface DepartamentoConfig {
 
 /**
  * Config estático de la tabla NACIONAL (solo lectura).
- * Estos valores representan exactamente la tabla que compartiste:
  *
- * NACIONAL   ...   Días campo Encuest  Viáticos  T. Microbus  Hotel
- * Ahuachapán ...                   ?    6.00      125.00       0
- * Santa Ana  ...                        6.00      100.00       0
- * ...
- * San Miguel ...                       10.00      180.00       12.00
- * Morazán   ...                       10.00      180.00       12.00
- * La Unión  ...                       10.00      180.00       12.00
+ * Los valores 39, 20, 68, 33, ... son la distribución de entrevistas
+ * del caso base de 1050 entrevistas (714 urbano, 336 rural).
+ *
+ * Dividimos entre 1050 para obtener porcentajes que luego se escalan
+ * a cualquier H4 que ingrese el cliente.
  */
 const DEPARTAMENTOS_NACIONAL: DepartamentoConfig[] = [
   {
@@ -248,11 +247,6 @@ export interface DistribucionDepartamento {
    * según la fórmula:
    *
    *   Días campo = (Q14 / (T14 * U14)) * 1.05
-   *
-   * donde:
-   *   Q14 = total entrevistas del depto
-   *   T14 = rendimiento
-   *   U14 = encuestadores
    */
   diasCampoEncuest?: number;
 
@@ -263,6 +257,31 @@ export interface DistribucionDepartamento {
   viaticosUnit?: number;
   tMicrobusUnit?: number;
   hotelUnit?: number;
+
+  /**
+   * Precio de boleta para este departamento.
+   * En la práctica es el mismo valor para todos los deptos,
+   * calculado según penetración y duración del cuestionario.
+   */
+  precioBoleta?: number;
+
+  /**
+   * Totales por departamento:
+   *  - Total viáticos
+   *  - Total T. Microbus
+   *  - Total hotel
+   */
+  totalViaticos?: number;
+  totalTMicrobus?: number;
+  totalHotel?: number;
+
+  /**
+   * Pagos de personal:
+   *  - Pago encuestadores = PrecioBoleta * TotalEntrevistasDepto
+   *  - Pago supervisores  = 20 * DíasCampoEncuest
+   */
+  pagoEncuestadores?: number;
+  pagoSupervisores?: number;
 }
 
 /**
@@ -288,9 +307,6 @@ export interface DistribucionNacionalResult {
   /**
    * Totales globales de encuestadores y supervisores
    * (fila TOTAL de la tabla).
-   *
-   * Q126 = totalEncuestadoresGlobal
-   * totalSupervisoresGlobal = ROUND(Q126 / 4, 0)
    */
   totalEncuestadoresGlobal?: number;
   totalSupervisoresGlobal?: number;
@@ -300,6 +316,30 @@ export interface DistribucionNacionalResult {
    * En tu Excel es 15.00 en el ejemplo que enviaste.
    */
   totalDiasCampoEncuestGlobal?: number;
+
+  /**
+   * Precio de boleta global usado en la tabla
+   * (mismo valor que se asigna a cada departamento).
+   */
+  precioBoletaGlobal?: number;
+
+  /**
+   * Totales globales de:
+   *  - Viáticos
+   *  - T. Microbus
+   *  - Hotel
+   */
+  totalViaticosGlobal?: number;
+  totalTMicrobusGlobal?: number;
+  totalHotelGlobal?: number;
+
+  /**
+   * Totales globales de pagos de personal:
+   *  - Pago encuestadores
+   *  - Pago supervisores
+   */
+  totalPagoEncuestadoresGlobal?: number;
+  totalPagoSupervisoresGlobal?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +360,7 @@ export interface DistribucionNacionalResult {
  */
 export function distribuirEntrevistasNacional(
   totalEntrevistasBase: number, // H4
-  tipoEntrevista: string,       // C11
+  tipoEntrevista: string, // C11
 ): DistribucionNacionalResult {
   if (!Number.isFinite(totalEntrevistasBase) || totalEntrevistasBase <= 0) {
     throw new Error('totalEntrevistasBase debe ser un número positivo');
@@ -356,8 +396,6 @@ export function distribuirEntrevistasNacional(
       total: totalInt,
       horasEfectivas: cfg.horasEfectivas,
       tiempoEfectivoMin: cfg.tiempoEfectivoMin,
-      // los demás campos (rendimiento, encuestadores, etc.)
-      // se irán llenando por etapas en las funciones de abajo
     });
   }
 
@@ -407,11 +445,11 @@ export interface ParamsRendimiento {
   totalEncuestadores: number;
 
   // Casa por casa / Nacional:
-  segmentSize: number;      // P124
-  filterMinutes: number;    // P121
-  searchMinutes: number;    // P123
-  desplazamientoMin: number;// P125
-  groupSize: number;        // para P126 = ROUND(Q126 / groupSize, 0)
+  segmentSize: number; // P124
+  filterMinutes: number; // P121
+  searchMinutes: number; // P123
+  desplazamientoMin: number; // P125
+  groupSize: number; // para P126 = ROUND(Q126 / groupSize, 0)
 }
 
 /**
@@ -500,8 +538,8 @@ export function aplicarEncuestadoresYSupervisoresNacional(
   distribucion: DistribucionNacionalResult,
   totalEncuestadores: number,
   options?: {
-    groupSize?: number;        // para P126
-    supervisorSplit?: number;  // para repartir totalSupervisores en la columna por fila
+    groupSize?: number; // para P126
+    supervisorSplit?: number; // para repartir totalSupervisores en la columna por fila
   },
 ): DistribucionNacionalResult {
   if (!Number.isFinite(totalEncuestadores) || totalEncuestadores <= 0) {
@@ -558,7 +596,6 @@ export function aplicarDiasCampoYCostosNacional(
   let totalDiasCampo = 0;
 
   const filas = distribucion.filas.map((filaBase) => {
-    // Buscar la config del departamento para leer viáticos/T. Microbus/Hotel
     const cfg = DEPARTAMENTOS_NACIONAL.find(
       (c) => c.nombre === filaBase.departamento,
     );
@@ -601,5 +638,213 @@ export function aplicarDiasCampoYCostosNacional(
     ...distribucion,
     filas,
     totalDiasCampoEncuestGlobal: totalDiasCampo,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Precio de boleta (tabla por penetración y duración)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parámetros para calcular el precio de boleta.
+ *
+ * Depende de:
+ *  - P120 = duración del cuestionario en minutos
+ *  - P122 = penetración (0–1)
+ *
+ * Se usa la tabla:
+ *
+ *  Penetración > 50%            Penetración < 50%
+ *  10–15 min → 1.50            10–15 min → 2.00
+ *  16–25 min → 2.00            16–25 min → 2.50
+ *  26–45 min → 3.00            26–45 min → 3.50
+ *  45+ min   → 4.00            45+ min   → 4.50
+ */
+export interface ParamsPrecioBoleta {
+  duracionCuestionarioMin: number; // P120
+  penetracion: number; // P122 como fracción (0.80 = 80 %)
+}
+
+/**
+ * Devuelve el precio unitario de boleta según duración y penetración.
+ */
+export function calcularPrecioBoleta(params: ParamsPrecioBoleta): number {
+  const { duracionCuestionarioMin, penetracion } = params;
+
+  if (!Number.isFinite(duracionCuestionarioMin) || duracionCuestionarioMin <= 0) {
+    throw new Error(
+      'duracionCuestionarioMin debe ser > 0 para calcular precio de boleta',
+    );
+  }
+  if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+    throw new Error(
+      'penetracion debe estar en (0,1] para calcular precio de boleta',
+    );
+  }
+
+  const esAltaPenetracion = penetracion > 0.5; // >50 %
+
+  let precio: number;
+
+  if (duracionCuestionarioMin >= 10 && duracionCuestionarioMin <= 15) {
+    precio = esAltaPenetracion ? 1.5 : 2.0;
+  } else if (duracionCuestionarioMin >= 16 && duracionCuestionarioMin <= 25) {
+    precio = esAltaPenetracion ? 2.0 : 2.5;
+  } else if (duracionCuestionarioMin >= 26 && duracionCuestionarioMin <= 45) {
+    precio = esAltaPenetracion ? 3.0 : 3.5;
+  } else if (duracionCuestionarioMin > 45) {
+    precio = esAltaPenetracion ? 4.0 : 4.5;
+  } else {
+    // Si algún día ponen cuestionarios de <10 min,
+    // se puede definir otra regla. Por ahora fallamos explícito.
+    throw new Error(
+      'La duración del cuestionario debe ser al menos 10 minutos para la tabla de precio de boleta',
+    );
+  }
+
+  return precio;
+}
+
+/**
+ * Asigna el precio de boleta calculado a cada departamento
+ * y guarda también el valor global.
+ */
+export function aplicarPrecioBoletaNacional(
+  distribucion: DistribucionNacionalResult,
+  params: ParamsPrecioBoleta,
+): DistribucionNacionalResult {
+  const precioBoleta = calcularPrecioBoleta(params);
+
+  const filas = distribucion.filas.map((fila) => ({
+    ...fila,
+    precioBoleta,
+  }));
+
+  return {
+    ...distribucion,
+    filas,
+    precioBoletaGlobal: precioBoleta, // ✅ corregido
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Totales: Viáticos, T. Microbus, Hotel
+// ---------------------------------------------------------------------------
+
+/**
+ * Calcula los totales por departamento y globales para:
+ *
+ *  - Total viáticos      = (U14 + V14) * W14 * Y14
+ *  - Total T. Microbus   = AA14 * (AB6 * CEILING((AB4 + AB5) / AB3, 1)) * W14
+ *  - Total hotel         = (U14 + V14) * W14 * AB25
+ *
+ * En este motor, simplificamos algunos parámetros como constantes
+ * (AB3, AB4, AB5, AB6, AB25) o se podrían parametrizar si cambia
+ * por proyecto.
+ */
+export function calcularTotalesViaticosTransporteHotelNacional(
+  distribucion: DistribucionNacionalResult,
+): DistribucionNacionalResult {
+  // En tu Excel, estos vienen de la hoja de botones.
+  // Aquí los dejamos como constantes, pero se pueden parametrizar.
+  const AB3 = 12; // capacidad microbus (personas) → ejemplo
+  const AB4 = 0; // posible base/extra fijo
+  const AB5 = 0; // posible base/extra fijo
+  const AB6 = 1; // factor de viajes (se multiplica con tMicrobusUnit)
+  const AB25 = 1; // factor para hotel (se multiplica con hotelUnit)
+
+  let totalViaticosGlobal = 0;
+  let totalTMicrobusGlobal = 0;
+  let totalHotelGlobal = 0;
+
+  const filas = distribucion.filas.map((fila) => {
+    const totalPersonas = (fila.encuestadores ?? 0) + (fila.supervisores ?? 0);
+    const diasCampo = fila.diasCampoEncuest ?? 0;
+
+    const viaticosUnit = fila.viaticosUnit ?? 0;
+    const tMicrobusUnit = fila.tMicrobusUnit ?? 0;
+    const hotelUnit = fila.hotelUnit ?? 0;
+
+    // Total viáticos = (U14 + V14) * W14 * Y14
+    const totalViaticos = totalPersonas * diasCampo * viaticosUnit;
+
+    // Total T. Microbus = AA14 * (AB6 * CEILING((AB4 + AB5)/AB3, 1)) * W14
+    const viajesNecesarios = Math.ceil((AB4 + AB5) / AB3) || 1;
+    const totalTMicrobus =
+      totalPersonas * AB6 * viajesNecesarios * diasCampo * tMicrobusUnit;
+
+    // Total hotel = (U25 + V25) * W25 * AB25
+    const totalHotel = totalPersonas * diasCampo * AB25 * hotelUnit;
+
+    totalViaticosGlobal += totalViaticos;
+    totalTMicrobusGlobal += totalTMicrobus;
+    totalHotelGlobal += totalHotel;
+
+    return {
+      ...fila,
+      totalViaticos,
+      totalTMicrobus,
+      totalHotel,
+    };
+  });
+
+  return {
+    ...distribucion,
+    filas,
+    totalViaticosGlobal,
+    totalTMicrobusGlobal,
+    totalHotelGlobal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Pagos de personal: encuestadores y supervisores
+// ---------------------------------------------------------------------------
+
+/**
+ * Calcula los pagos de:
+ *
+ *  - Pago encuestadores = PrecioBoleta * TotalEntrevistasDepto
+ *      (AF14 * Q14 en tu Excel)
+ *
+ *  - Pago supervisores  = 20 * DíasCampoEncuest
+ *      (20 * W14 en tu Excel)
+ *
+ * y también los totales globales.
+ */
+export function calcularPagosPersonalNacional(
+  distribucion: DistribucionNacionalResult,
+): DistribucionNacionalResult {
+  const TARIFA_SUPERVISOR_DIA = 20; // 20 US$ por día de campo (constante de tu Excel)
+
+  let totalPagoEncuestadoresGlobal = 0;
+  let totalPagoSupervisoresGlobal = 0;
+
+  const filas = distribucion.filas.map((fila) => {
+    const precioBoleta = fila.precioBoleta ?? 0;
+    const totalEntrevistasDepto = fila.total ?? 0;
+    const diasCampo = fila.diasCampoEncuest ?? 0;
+
+    // AF14 * Q14
+    const pagoEncuestadores = precioBoleta * totalEntrevistasDepto;
+
+    // 20 * W14
+    const pagoSupervisores = TARIFA_SUPERVISOR_DIA * diasCampo;
+
+    totalPagoEncuestadoresGlobal += pagoEncuestadores;
+    totalPagoSupervisoresGlobal += pagoSupervisores;
+
+    return {
+      ...fila,
+      pagoEncuestadores,
+      pagoSupervisores,
+    };
+  });
+
+  return {
+    ...distribucion,
+    filas,
+    totalPagoEncuestadoresGlobal,
+    totalPagoSupervisoresGlobal,
   };
 }

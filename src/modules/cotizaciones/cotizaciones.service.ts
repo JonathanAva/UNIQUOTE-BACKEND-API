@@ -2,23 +2,17 @@
 
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@/infra/database/prisma.service';
 import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 
-// Motor del cotizador para cobertura "Nacional"
-import {
-  distribuirEntrevistasNacional,
-  aplicarRendimientoNacional,
-  aplicarEncuestadoresYSupervisoresNacional,
-  aplicarDiasCampoYCostosNacional,
-  type ParamsRendimiento,
-} from './engine/tarifario-nacional';
+// Builder para "Casa por casa"
+import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder'; 
 
 @Injectable()
 export class CotizacionesService {
@@ -40,111 +34,14 @@ export class CotizacionesService {
     return `COT-${projectId}-${seq}`;
   }
 
-  /**
-   * Traduce el campo penetracionCategoria (string) a un valor numérico
-   * de penetración (P122) entre 0 y 1.
-   *
-   * - Si viene vacío/undefined → lanza BadRequestException.
-   * - Si viene un número/porcentaje → lo parsea.
-   * - Si viene una etiqueta (facil/medio/dificil) → usa un mapa básico.
-   */
-  private mapPenetracionCategoria(raw?: string): number {
-    if (!raw) {
-      throw new BadRequestException(
-        'penetracionCategoria es requerida para calcular rendimiento',
-      );
-    }
-
-    const value = raw.trim().toLowerCase();
-
-    // Si viene algo numérico (ej. "0.8" o "80%"), lo intentamos parsear
-    const numericCandidate = Number(value.replace('%', ''));
-    if (!Number.isNaN(numericCandidate) && numericCandidate > 0) {
-      // Si es > 1 asumimos que viene como porcentaje ("80" = 80 %)
-      return numericCandidate > 1 ? numericCandidate / 100 : numericCandidate;
-    }
-
-    // Map básico por etiqueta descriptiva
-    switch (value) {
-      case 'facil':
-      case 'fácil':
-        return 0.85; // TODO: ajustar a tus rangos reales (80–100 %, etc.)
-      case 'medio':
-        return 0.6;
-      case 'dificil':
-      case 'difícil':
-        return 0.35;
-      default:
-        throw new BadRequestException(
-          `penetracionCategoria inválida: "${raw}". Debe ser un valor numérico o uno de: facil | medio | dificil`,
-        );
-    }
-  }
-
-  /**
-   * Construye los parámetros globales que usa la fórmula de rendimiento
-   * (P120, P121, P122, P123, P124, P125, P126, Q126).
-   *
-   * Aquí se concentran los "constantes" de Casa por casa / Nacional.
-   * Se valida que los campos requeridos no vengan undefined.
-   */
-  private buildParamsRendimiento(
-    dto: CreateCotizacionDto | UpdateCotizacionDto,
-  ): ParamsRendimiento {
-    // Validar que tengamos duración de cuestionario
-    if (
-      dto.duracionCuestionarioMin === null ||
-      dto.duracionCuestionarioMin === undefined
-    ) {
-      throw new BadRequestException(
-        'duracionCuestionarioMin es requerida para calcular rendimiento',
-      );
-    }
-
-    // Validar que tengamos encuestadores totales
-    if (
-      dto.encuestadoresTotales === null ||
-      dto.encuestadoresTotales === undefined ||
-      dto.encuestadoresTotales <= 0
-    ) {
-      throw new BadRequestException(
-        'encuestadoresTotales debe ser mayor que 0 para calcular rendimiento',
-      );
-    }
-
-    // Validar/mapping de penetración
-    const penetracion = this.mapPenetracionCategoria(
-      dto.penetracionCategoria,
-    );
-
-    return {
-      // P120 - duración cuestionario en minutos (input del cliente)
-      duracionCuestionarioMin: dto.duracionCuestionarioMin,
-
-      // P122 - penetración como fracción (0.80 = 80 %)
-      penetracion,
-
-      // Q126 - Encuestadores totales
-      totalEncuestadores: dto.encuestadoresTotales,
-
-      // Valores fijos según tu Excel para:
-      // Casa por casa, cobertura Nacional
-      segmentSize: 20,        // P124: tamaño de segmento
-      filterMinutes: 2,       // P121: duración del filtro
-      searchMinutes: 8,       // P123: tiempo de búsqueda
-      desplazamientoMin: 60,  // P125: min de desplazamiento
-      groupSize: 4,           // para P126 = ROUND(Q126 / 4, 0)
-    };
-  }
-
   // ---------------------------------------------------------------------------
   // Casos de uso públicos
   // ---------------------------------------------------------------------------
 
   /**
    * Punto de entrada principal para crear una cotización.
-   * Aquí se guardan los datos base y, según la cobertura,
-   * se llama al "motor" para empezar a calcular la lógica del Excel.
+   * Aquí se guardan los datos base y, según el tipo de entrevista,
+   * se delega al *builder* correspondiente (casa por casa, telefónico, etc.).
    */
   async create(dto: CreateCotizacionDto, createdById: number) {
     // 1) Verifica que exista el proyecto
@@ -177,66 +74,35 @@ export class CotizacionesService {
         clienteSolicitaReporte: dto.clienteSolicitaReporte,
         clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
         incentivoTotal: dto.incentivoTotal ?? null,
+        // factorComisionablePct / factorNoComisionablePct
+        // y totales globales se podrán llenar después
       },
     });
 
-    // 3) Lógica específica según cobertura
-    //    De momento solo trabajamos con la cobertura "Nacional"
-    const coberturaLower = dto.cobertura.trim().toLowerCase();
+    // 3) Delegar a builder según tipo de entrevista
+    const tipoEntrevistaLower = dto.tipoEntrevista.trim().toLowerCase();
 
-    if (coberturaLower === 'nacional') {
-      // 3.1 Distribuye las entrevistas por departamento
-      const distribucion = distribuirEntrevistasNacional(
-        dto.totalEntrevistas,
-        dto.tipoEntrevista,
-      );
+    if (tipoEntrevistaLower === 'casa por casa') {
+      // Por ahora solo soportamos cobertura "Nacional" dentro del builder.
+const buildResult = buildCotizacionCasaPorCasa({
+  totalEntrevistas: dto.totalEntrevistas,
+  duracionCuestionarioMin: dto.duracionCuestionarioMin,
+  tipoEntrevista: dto.tipoEntrevista,
+  penetracionCategoria: dto.penetracionCategoria,
+  cobertura: dto.cobertura,
+  supervisores: dto.supervisores,
+  encuestadoresTotales: dto.encuestadoresTotales,
+  realizamosCuestionario: dto.realizamosCuestionario,
+});
 
-      // 3.2 Calcula rendimiento por departamento
-      const paramsRendimiento = this.buildParamsRendimiento(dto);
-      const distribucionConRendimiento = aplicarRendimientoNacional(
-        distribucion,
-        paramsRendimiento,
-      );
 
-      // 3.3 Calcula encuestadores y supervisores por departamento
-      //      usando Q126 = dto.encuestadoresTotales
-      const distribucionConPersonal =
-        aplicarEncuestadoresYSupervisoresNacional(
-          distribucionConRendimiento,
-          dto.encuestadoresTotales,
-          {
-            groupSize: 4,       // para P126 = ROUND(Q126/4,0)
-            supervisorSplit: 4, // supervisores por fila = P126 / 4
-          },
-        );
-
-      // 3.4 Calcula Días campo Encuest y asigna precios unitarios
-      //     de viáticos, transporte y hotel
-      const distribucionFinal = aplicarDiasCampoYCostosNacional(
-        distribucionConPersonal,
-      );
-
-      // distribucionFinal.filas ahora contiene, por depto:
-      //  - urbano, rural, total
-      //  - horasEfectivas, tiempoEfectivoMin
-      //  - rendimiento
-      //  - encuestadores, supervisores
-      //  - diasCampoEncuest
-      //  - viaticosUnit, tMicrobusUnit, hotelUnit
+      // ⬇️ Cuando queramos persistir los bloques (TRABAJO DE CAMPO,
+      // RECURSOS, etc.) haremos aquí un $transaction para:
+      // - crear CotizacionItem[] desde buildResult.items
+      // - actualizar totalCobrar, costoPorEntrevista, factores, etc.
       //
-      // distribucionFinal.totalDiasCampoEncuestGlobal
-      // representa la suma a nivel nacional (fila TOTAL).
-      //
-      // TODO (siguiente etapa):
-      // - Usar distribucionFinal para construir CotizacionItem:
-      //   * TRABAJO DE CAMPO (Días campo, pago encuestadores, pago supervisores)
-      //   * Viáticos totales por departamento
-      //   * Transporte, hotel, etc.
-      // - Guardar esos items en la tabla cotizacionItem.
-      //
-      // Por ahora solo integramos el motor, sin persistir aún
-      // estos detalles en la BD.
-      void distribucionFinal;
+      // De momento solo lo ejecutamos para asegurarnos que calcula bien.
+      void buildResult;
     }
 
     // 4) Devolvemos la cotización con la info actual
@@ -352,8 +218,9 @@ export class CotizacionesService {
 
     // TODO:
     // - Cuando implementemos el recálculo en update, aquí deberíamos
-    //   volver a llamar al motor (distribuir, rendimiento, días, etc.)
-    return this.findOne(updated.id);
+    //   volver a llamar al builder correspondiente.
+    void updated;
+    return this.findOne(id);
   }
 
   /**
