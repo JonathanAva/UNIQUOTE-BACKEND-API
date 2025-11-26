@@ -84,16 +84,18 @@ export class CotizacionesService {
 
     if (tipoEntrevistaLower === 'casa por casa') {
       // Por ahora solo soportamos cobertura "Nacional" dentro del builder.
-const buildResult = buildCotizacionCasaPorCasa({
-  totalEntrevistas: dto.totalEntrevistas,
-  duracionCuestionarioMin: dto.duracionCuestionarioMin,
-  tipoEntrevista: dto.tipoEntrevista,
-  penetracionCategoria: dto.penetracionCategoria,
-  cobertura: dto.cobertura,
-  supervisores: dto.supervisores,
-  encuestadoresTotales: dto.encuestadoresTotales,
-  realizamosCuestionario: dto.realizamosCuestionario,
-});
+      const buildResult = buildCotizacionCasaPorCasa({
+        totalEntrevistas: dto.totalEntrevistas,
+        duracionCuestionarioMin: dto.duracionCuestionarioMin,
+        tipoEntrevista: dto.tipoEntrevista,
+        penetracionCategoria: dto.penetracionCategoria,
+        cobertura: dto.cobertura,
+        supervisores: dto.supervisores,
+        encuestadoresTotales: dto.encuestadoresTotales,
+        realizamosCuestionario: dto.realizamosCuestionario,
+        realizamosScript: dto.realizamosScript,
+      });
+
 
 
       // ⬇️ Cuando queramos persistir los bloques (TRABAJO DE CAMPO,

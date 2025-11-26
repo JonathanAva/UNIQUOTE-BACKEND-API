@@ -4,14 +4,12 @@
 // del tipo "Casa por casa" con cobertura NACIONAL.
 //
 // Aquí SOLO hay lógica de armado de bloques:
-//
 //  - TRABAJO DE CAMPO
 //  - RECURSOS
-//  - DIRECCIÓN (Días director + Realización Cuestionario)
+//  - DIRECCIÓN
 //  - (más adelante) PROCESAMIENTO, ELEMENTOS EXTRA, etc.
 //
-// No hay Nest, ni Prisma, ni acceso a BD: solo cálculos
-// y armado de estructuras planas para luego crear CotizacionItem.
+// No hay Nest, ni Prisma, ni acceso a BD.
 
 import {
   distribuirEntrevistasNacional,
@@ -29,25 +27,20 @@ import {
 // Tipos locales
 // ---------------------------------------------------------
 
-/**
- * Representa la estructura que luego se mapeará a CotizacionItem
- * de Prisma. Aquí usamos number / boolean a pelo.
- */
 export interface CotizacionItemBuild {
   category: string;
   description: string;
-  personas: number | null;         // "# pers/encues/grp"
-  dias: number | null;             // "# días/pág."
-  costoUnitario: number | null;    // "Costo US$"
-  costoTotal: number | null;       // "Costo total US$"
-  comisionable: boolean;           // Sí / No
-  totalConComision: number | null; // "Total"
-  orden: number;                   // para mantener el orden del Excel
+  personas: number | null;        // "# pers/encues/grp"
+  dias: number | null;            // "# días/pág."
+  costoUnitario: number | null;   // "Costo US$"
+  costoTotal: number | null;      // "Costo total US$"
+  comisionable: boolean;          // Sí / No
+  totalConComision: number | null;// "Total"
+  orden: number;                  // para mantener el orden del Excel
 }
 
 /**
- * Parámetros que necesita el builder de Casa por casa / Nacional
- * una vez que ya tenemos la distribución calculada por el motor.
+ * Parámetros que necesita el builder de Casa por casa / Nacional.
  */
 export interface CasaPorCasaNacionalBuilderParams {
   // Inputs de la cotización
@@ -57,7 +50,8 @@ export interface CasaPorCasaNacionalBuilderParams {
   cobertura: string;                 // Nacional / Urbano / AMSS / Unimer...
   supervisores: number;              // Ingresar!C19
   encuestadoresTotales: number;      // Ingresar!C20
-  realizamosCuestionario: boolean;   // Ingresar!C24 (¿Realizamos Cuestionario?)
+  realizamosCuestionario: boolean;   // Ingresar!C24
+  realizamosScript: boolean;         // Ingresar!C25
 
   // Factores globales de la cabecera de cotización
   factorComisionable: number;        // G4 → 1.00 (100 %)
@@ -68,10 +62,7 @@ export interface CasaPorCasaNacionalBuilderParams {
 }
 
 /**
- * Resultado global del builder:
- *  - items: todos los CotizacionItem que se guardarán
- *  - totalCobrar: suma de "Total" de todos los items
- *  - costoPorEntrevista: totalCobrar / totalEntrevistas
+ * Resultado global del builder.
  */
 export interface CasaPorCasaNacionalBuildResult {
   items: CotizacionItemBuild[];
@@ -79,9 +70,7 @@ export interface CasaPorCasaNacionalBuildResult {
   costoPorEntrevista: number;
 }
 
-/**
- * Entrada que usará el SERVICE al llamar al builder.
- */
+// Entrada que usará el SERVICE al llamar al builder
 export interface BuildCotizacionCasaPorCasaInput {
   totalEntrevistas: number;
   duracionCuestionarioMin: number;
@@ -91,6 +80,7 @@ export interface BuildCotizacionCasaPorCasaInput {
   supervisores: number;
   encuestadoresTotales: number;
   realizamosCuestionario: boolean;
+  realizamosScript: boolean;
 }
 
 // ---------------------------------------------------------
@@ -100,12 +90,6 @@ export interface BuildCotizacionCasaPorCasaInput {
 const round2 = (value: number): number =>
   Math.round(value * 100) / 100;
 
-/**
- * Aplica el factor comisionable / no comisionable.
- *
- * - Si comisionable = true → costoTotal * (1 + factorComisionable)
- * - Si comisionable = false → costoTotal * (1 + factorNoComisionable)
- */
 function aplicarComision(
   costoTotal: number,
   comisionable: boolean,
@@ -119,11 +103,6 @@ function aplicarComision(
   return round2(costoTotal * factor);
 }
 
-/**
- * Helper básico para filas cuya fórmula de costo total es:
- *
- *   costoTotal = personas * dias * costoUnitario
- */
 function buildItemSimple(opts: {
   category: string;
   description: string;
@@ -161,7 +140,7 @@ function buildItemSimple(opts: {
 }
 
 // ---------------------------------------------------------
-// Bloque: TRABAJO DE CAMPO (Casa por casa / Nacional)
+// Bloque: TRABAJO DE CAMPO
 // ---------------------------------------------------------
 
 function buildTrabajoCampoCasaPorCasaNacional(
@@ -179,16 +158,13 @@ function buildTrabajoCampoCasaPorCasaNacional(
 
   const totalPersonasCampo = supervisores + encuestadoresTotales;
 
-  // Días de campo global (suma de la columna "Días campo Encuest")
   const diasCampoReal = distribucion.totalDiasCampoEncuestGlobal ?? 0;
-  const diasCampo = round2(diasCampoReal || 0); // ej. 15.00
+  const diasCampo = round2(diasCampoReal || 0);
 
-  // Totales globales de Viáticos / Transporte / Hotel ya calculados
   const totalViaticos = distribucion.totalViaticosGlobal ?? 0;
   const totalTransporte = distribucion.totalTMicrobusGlobal ?? 0;
   const totalHotel = distribucion.totalHotelGlobal ?? 0;
 
-  // Totales globales de pagos de personal
   const totalPagoEncuestadores =
     distribucion.totalPagoEncuestadoresGlobal ?? 0;
   const totalPagoSupervisores =
@@ -196,51 +172,41 @@ function buildTrabajoCampoCasaPorCasaNacional(
 
   // Dirección Trabajo Campo
   {
-    const personas = 1;
-    const costoUnitario = 50;
-
     const item = buildItemSimple({
       category: 'TRABAJO DE CAMPO',
       description: 'Dirección Trabajo Campo',
-      personas,
+      personas: 1,
       dias: diasCampo,
-      costoUnitario,
+      costoUnitario: 50,
       comisionable: true,
       orden: 10,
       factorComisionable,
       factorNoComisionable,
     });
-
     items.push(item);
   }
 
   // Capacitación
   {
-    const personas = totalPersonasCampo;
-    const costoUnitario = 8;
-
     const item = buildItemSimple({
       category: 'TRABAJO DE CAMPO',
       description: 'Capacitación',
-      personas,
+      personas: totalPersonasCampo,
       dias: 1,
-      costoUnitario,
+      costoUnitario: 8,
       comisionable: true,
       orden: 11,
       factorComisionable,
       factorNoComisionable,
     });
-
     items.push(item);
   }
 
-  // Supervisor
+  // Supervisor (campo)
   {
     const personas = supervisores;
     const dias = diasCampo;
-
     const costoTotal = round2(totalPagoSupervisores);
-
     const costoUnitario =
       personas > 0 && dias > 0
         ? round2(costoTotal / (personas * dias))
@@ -248,7 +214,7 @@ function buildTrabajoCampoCasaPorCasaNacional(
 
     const totalConComision = aplicarComision(
       costoTotal,
-      true, // comisionable
+      true,
       factorComisionable,
       factorNoComisionable,
     );
@@ -268,43 +234,33 @@ function buildTrabajoCampoCasaPorCasaNacional(
 
   // Encuestadores
   {
-    const personas = encuestadoresTotales;
-    const dias = diasCampo;
-    const costoUnitario = 3.5;
-
     const item = buildItemSimple({
       category: 'TRABAJO DE CAMPO',
       description: 'Encuestadores',
-      personas,
-      dias,
-      costoUnitario,
+      personas: encuestadoresTotales,
+      dias: diasCampo,
+      costoUnitario: 3.5,
       comisionable: true,
       orden: 13,
       factorComisionable,
       factorNoComisionable,
     });
-
     items.push(item);
   }
 
   // Pago de filtros
   {
-    const personas = 0;
-    const dias = 1;
-    const costoUnitario = 0.5;
-
     const item = buildItemSimple({
       category: 'TRABAJO DE CAMPO',
       description: 'Pago de filtros',
-      personas,
-      dias,
-      costoUnitario,
+      personas: 0,
+      dias: 1,
+      costoUnitario: 0.5,
       comisionable: true,
       orden: 14,
       factorComisionable,
       factorNoComisionable,
     });
-
     items.push(item);
   }
 
@@ -313,7 +269,6 @@ function buildTrabajoCampoCasaPorCasaNacional(
     const personas = totalPersonasCampo;
     const dias = diasCampo;
     const costoTotal = round2(totalViaticos);
-
     const costoUnitario =
       personas > 0 && dias > 0
         ? round2(costoTotal / (personas * dias))
@@ -344,7 +299,6 @@ function buildTrabajoCampoCasaPorCasaNacional(
     const personas = totalPersonasCampo;
     const dias = diasCampo;
     const costoTotal = round2(totalTransporte);
-
     const costoUnitario =
       personas > 0 && dias > 0
         ? round2(costoTotal / (personas * dias))
@@ -375,7 +329,6 @@ function buildTrabajoCampoCasaPorCasaNacional(
     const personas = totalPersonasCampo;
     const dias = diasCampo;
     const costoTotal = round2(totalHotel);
-
     const costoUnitario =
       personas > 0 && dias > 0
         ? round2(costoTotal / (personas * dias))
@@ -383,7 +336,7 @@ function buildTrabajoCampoCasaPorCasaNacional(
 
     const totalConComision = aplicarComision(
       costoTotal,
-      false, // No comisionable
+      false,
       factorComisionable,
       factorNoComisionable,
     );
@@ -405,15 +358,11 @@ function buildTrabajoCampoCasaPorCasaNacional(
 }
 
 // ---------------------------------------------------------
-// Bloque: RECURSOS (Casa por casa / Nacional)
+// Bloque: RECURSOS
 // ---------------------------------------------------------
 
-/**
- * Config específica para recursos de Casa por casa / Nacional.
- * Equivale a lo que hoy saca la hoja "Botones".
- */
 const RECURSOS_CONFIG_NACIONAL = {
-  diasRecursos: 15,            // XLOOKUP(Ingresar!C18, Botones!K:L)
+  diasRecursos: 15,
   telefonoUnimeresUnit: 0.6,
   telefonoCelularCampoUnit: 0.36,
   internetEncuestadoresUnit: 3,
@@ -441,7 +390,6 @@ function buildRecursosCasaPorCasaNacional(
   const totalPersonasCampo = supervisores + encuestadoresTotales;
   const diasRecursos = RECURSOS_CONFIG_NACIONAL.diasRecursos;
 
-  // Para la plataforma STG se usa el total de entrevistas ajustado (H4 * 1.05)
   const totalEntrevistasAjustado =
     distribucion.totalEntrevistasAjustado || totalEntrevistas;
 
@@ -567,13 +515,11 @@ function buildRecursosCasaPorCasaNacional(
     });
   }
 
-  // El resto de filas de RECURSOS se dejarán en 0 por ahora.
-
   return items;
 }
 
 // ---------------------------------------------------------
-// Bloque: DIRECCIÓN (Casa por casa / Nacional)
+// Bloque: DIRECCIÓN – Días director
 // ---------------------------------------------------------
 
 function buildDireccionCasaPorCasaNacional(
@@ -583,38 +529,23 @@ function buildDireccionCasaPorCasaNacional(
 
   const items: CotizacionItemBuild[] = [];
 
-  // ===== Días director =====
-  //
-  // díasProyecto = totalDiasCampoEncuestGlobal (ej. 15)
-  // horasBase    = díasProyecto * 2
-  // horasTotales = horasBase + 4
-  // costoInterno = horasTotales * 10
-  // totalConComision = costoInterno / 0.4
-  //
-  // Tabla:
-  //   Personas = 1
-  //   "Días"   = 34 (horas dedicadas)
-  //   Costo US$ / Costo total US$ = "-" (null)
-  //   Comisionable = Sí
-  //   Total = 850.00
-
-  const diasProyecto = distribucion.totalDiasCampoEncuestGlobal ?? 0;
+  const diasProyecto = distribucion.totalDiasCampoEncuestGlobal ?? 0; // ej. 15
   const horasBase = diasProyecto * 2;
-  const horasTotales = horasBase + 4;
+  const horasTotales = horasBase + 4; // 2h/día + 4h extras
 
   const COSTO_HORA_DIRECTOR = 10;
-  const costoInterno = round2(horasTotales * COSTO_HORA_DIRECTOR);
-  const totalConComision = round2(costoInterno / 0.4);
+  const costoInterno = round2(horasTotales * COSTO_HORA_DIRECTOR); // 340
+  const totalConComision = round2(costoInterno / 0.4); // 850
 
   items.push({
     category: 'DIRECCIÓN',
     description: 'Días director',
     personas: 1,
-    dias: horasTotales,       // 34
+    dias: horasTotales,      // 34
     costoUnitario: null,
     costoTotal: null,
     comisionable: true,
-    totalConComision,         // 850.00
+    totalConComision,        // 850.00
     orden: 30,
   });
 
@@ -622,7 +553,7 @@ function buildDireccionCasaPorCasaNacional(
 }
 
 // ---------------------------------------------------------
-// Realización Cuestionario
+// DIRECCIÓN – Realización Cuestionario
 // ---------------------------------------------------------
 
 function buildRealizacionCuestionario(
@@ -630,32 +561,26 @@ function buildRealizacionCuestionario(
 ): CotizacionItemBuild {
   const { duracionCuestionarioMin, realizamosCuestionario } = params;
 
-  // Si el cliente NO pide que UNIMER haga el cuestionario,
-  // dejamos la fila en 0 (personas = 0).
   const personas = realizamosCuestionario ? 1 : 0;
   const dias = 1;
 
-  // Constantes del modelo
   const PREGUNTAS_POR_MINUTO = 4;
   const MINUTOS_POR_PREGUNTA = 5;
   const PRECIO_HORA = 10;
   const MARGEN_COMISION = 0.4;
 
-  // Investigación base (1.5 horas * 10)
   const investigacionHoras = 1.5;
   const investigacionPrecio = investigacionHoras * PRECIO_HORA; // 15
 
-  // Tiempo por pregunta
   const preguntasTotales = duracionCuestionarioMin * PREGUNTAS_POR_MINUTO;
-  const tiempoPorPreguntaMin = preguntasTotales * MINUTOS_POR_PREGUNTA;
-  const horasTiempoPorPregunta = tiempoPorPreguntaMin / 60; // 300/60 = 5
+  const tiempoPorPreguntaMin = preguntasTotales * MINUTOS_POR_PREGUNTA; // 300
+  const horasTiempoPorPregunta = tiempoPorPreguntaMin / 60; // 5
   const tiempoPorPreguntaPrecio =
-    horasTiempoPorPregunta * PRECIO_HORA; // 5 * 10 = 50
+    horasTiempoPorPregunta * PRECIO_HORA; // 50
 
-  // Precio interno del servicio
   const precioRealizacion = investigacionPrecio + tiempoPorPreguntaPrecio; // 65
-
   const costoTotal = round2(personas * dias * precioRealizacion); // 65 ó 0
+
   const totalConComision =
     personas > 0 ? round2(costoTotal / MARGEN_COMISION) : 0; // 162.50
 
@@ -664,11 +589,87 @@ function buildRealizacionCuestionario(
     description: 'Realización Cuestionario',
     personas,
     dias,
-    costoUnitario: null, // en el Excel se muestra "-"
+    costoUnitario: null, // en el Excel se deja "-"
     costoTotal,          // 65.00
     comisionable: true,
     totalConComision,    // 162.50
     orden: 32,
+  };
+}
+
+// ---------------------------------------------------------
+// DIRECCIÓN – Supervisor (Script)
+// ---------------------------------------------------------
+
+function buildSupervisorScript(
+  params: CasaPorCasaNacionalBuilderParams,
+): CotizacionItemBuild {
+  const { duracionCuestionarioMin, realizamosScript } = params;
+
+  const personas = realizamosScript ? 1 : 0;
+  const dias = 1;
+
+  if (!realizamosScript) {
+    return {
+      category: 'DIRECCIÓN',
+      description: 'Supervisor',
+      personas,
+      dias,
+      costoUnitario: null,
+      costoTotal: null,
+      comisionable: true,
+      totalConComision: 0,
+      orden: 33,
+    };
+  }
+
+  const PREGUNTAS_POR_MINUTO = 4;
+  const PRECIO_HORA_SCRIPT = 8;
+  const MINUTOS_CAMBIOS = 60;
+  const MARGEN_COMISION = 0.4;
+
+  const preguntasTotales =
+    duracionCuestionarioMin * PREGUNTAS_POR_MINUTO; // ej. 60
+
+  // Tiempo fijo para entender de qué trata → solo tiempo, sin costo
+  const _minEntender = duracionCuestionarioMin * 2; // 15 * 2 = 30
+
+  // Programar una pregunta en software
+  const minProg = preguntasTotales; // 1 min por pregunta
+  const horasProg = minProg / 60;
+  const precioProg = horasProg * PRECIO_HORA_SCRIPT; // 8
+
+  // Definir saltos y reglas
+  const minSaltos = preguntasTotales;
+  const horasSaltos = minSaltos / 60;
+  const precioSaltos = horasSaltos * PRECIO_HORA_SCRIPT; // 8
+
+  // Duración de prueba
+  const minPrueba = duracionCuestionarioMin * 2; // 30
+  const horasPrueba = minPrueba / 60;
+  const precioPrueba = horasPrueba * PRECIO_HORA_SCRIPT; // 4
+
+  // Cambios
+  const minCambios = MINUTOS_CAMBIOS; // 60
+  const horasCambios = minCambios / 60; // 1
+  const precioCambios = horasCambios * PRECIO_HORA_SCRIPT; // 8
+
+  const precioInterno = round2(
+    precioProg + precioSaltos + precioPrueba + precioCambios,
+  ); // 28.00
+
+  const totalConComision = round2(precioInterno / MARGEN_COMISION); // 70.00
+
+  return {
+    category: 'DIRECCIÓN',
+    description: 'Supervisor',
+    personas,
+    dias,
+    costoUnitario: null,  // "-" en Excel
+    costoTotal: null,     // "-"
+    comisionable: true,
+    totalConComision,     // 70.00
+    orden: 33,
   };
 }
 
@@ -683,13 +684,14 @@ export function buildCasaPorCasaNacional(
   const recursos = buildRecursosCasaPorCasaNacional(params);
   const direccion = buildDireccionCasaPorCasaNacional(params);
   const realizacionCuestionario = buildRealizacionCuestionario(params);
+  const supervisorScript = buildSupervisorScript(params);
 
-  // Orden final: TRABAJO DE CAMPO → RECURSOS → DIRECCIÓN
-  const items = [
+  const items: CotizacionItemBuild[] = [
     ...trabajoCampo,
     ...recursos,
     ...direccion,
-    ...[realizacionCuestionario],
+    realizacionCuestionario,
+    supervisorScript,
   ];
 
   const totalCobrar = round2(
@@ -780,7 +782,7 @@ export function buildCotizacionCasaPorCasa(
     { groupSize: 4, supervisorSplit: 4 },
   );
 
-  // 4) Días campo + costos unitarios
+  // 4) Días campo + costos
   distribucion = aplicarDiasCampoYCostosNacional(distribucion);
 
   // 5) Precio de boleta
@@ -796,7 +798,7 @@ export function buildCotizacionCasaPorCasa(
   // 7) Pagos personal
   distribucion = calcularPagosPersonalNacional(distribucion);
 
-  // 8) Construir los bloques con factores de cabecera
+  // 8) Construir bloques
   const builderParams: CasaPorCasaNacionalBuilderParams = {
     totalEntrevistas: input.totalEntrevistas,
     duracionCuestionarioMin: input.duracionCuestionarioMin,
@@ -805,7 +807,8 @@ export function buildCotizacionCasaPorCasa(
     supervisores: input.supervisores,
     encuestadoresTotales: input.encuestadoresTotales,
     realizamosCuestionario: input.realizamosCuestionario,
-    factorComisionable: 1,      // 100 %
+    realizamosScript: input.realizamosScript,
+    factorComisionable: 1,    // 100 %
     factorNoComisionable: 0.05, // 5 %
     distribucion,
   };
