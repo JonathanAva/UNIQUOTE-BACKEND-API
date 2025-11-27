@@ -3,16 +3,14 @@
 // Builder para armar los bloques de la cotización
 // del tipo "Casa por casa" con cobertura NACIONAL.
 //
-// Aquí SOLO hay lógica de armado de bloques:
-//
+// Aquí SOLO hay lógica de armado de bloques (sin Nest/Prisma):
 //  - TRABAJO DE CAMPO
 //  - RECURSOS
-//  - DIRECCIÓN (Días director, Realización cuestionario, Supervisor,
-//               Reporte de resultados)
-//  - (más adelante) PROCESAMIENTO, ELEMENTOS EXTRA, etc.
+//  - DIRECCIÓN
+//  - PROCESAMIENTO / INFORME
+//  - BI
 //
-// No hay Nest, ni Prisma, ni acceso a BD: solo cálculos
-// y armado de estructuras planas para luego crear CotizacionItem.
+// El service solo llama a buildCotizacionCasaPorCasa(...).
 
 import {
   distribuirEntrevistasNacional,
@@ -32,13 +30,13 @@ import {
 
 /**
  * Representa la estructura que luego se mapeará a CotizacionItem
- * de Prisma. Aquí usamos number / boolean a pelo.
+ * de Prisma. Aquí usamos number / boolean "a pelo".
  */
 export interface CotizacionItemBuild {
   category: string;
   description: string;
   personas: number | null;        // "# pers/encues/grp"
-  dias: number | null;            // "# días/pág."
+  dias: number | null;            // "# días / horas"
   costoUnitario: number | null;   // "Costo US$"
   costoTotal: number | null;      // "Costo total US$"
   comisionable: boolean;          // Sí / No
@@ -58,9 +56,12 @@ export interface CasaPorCasaNacionalBuilderParams {
   cobertura: string;                 // Nacional / Urbano / AMSS / Unimer...
   supervisores: number;              // Ingresar!C19
   encuestadoresTotales: number;      // Ingresar!C20
-  realizamosCuestionario: boolean;   // Ingresar!C24
-  realizamosScript: boolean;         // Ingresar!C25
-  clienteSolicitaReporte: boolean;   // Ingresar!C26
+
+  realizamosCuestionario: boolean;   // Ingresar!C24 (¿Realizamos Cuestionario?)
+  realizamosScript: boolean;         // Ingresar!C25 (¿Realizamos Script?)
+  clienteSolicitaReporte: boolean;   // Ingresar!C26 (¿Reporte?)
+  clienteSolicitaInformeBI: boolean; // Ingresar!C27 (¿Informe BI?)
+  numeroOlasBi: number;              // Nº de olas BI (base 2, 3 = una ola extra)
 
   // Factores globales de la cabecera de cotización
   factorComisionable: number;        // G4 → 1.00 (100 %)
@@ -82,7 +83,10 @@ export interface CasaPorCasaNacionalBuildResult {
   costoPorEntrevista: number;
 }
 
-// Entrada que usará el SERVICE al llamar al builder
+/**
+ * Entrada que usará el SERVICE al llamar al builder
+ * (los boolean pueden venir undefined → se defaultean adentro).
+ */
 export interface BuildCotizacionCasaPorCasaInput {
   totalEntrevistas: number;
   duracionCuestionarioMin: number;
@@ -91,9 +95,12 @@ export interface BuildCotizacionCasaPorCasaInput {
   cobertura: string;
   supervisores: number;
   encuestadoresTotales: number;
-  realizamosCuestionario: boolean;
-  realizamosScript: boolean;
-  clienteSolicitaReporte: boolean;
+
+  realizamosCuestionario?: boolean;
+  realizamosScript?: boolean;
+  clienteSolicitaReporte?: boolean;
+  clienteSolicitaInformeBI?: boolean;
+  numeroOlasBi?: number; // base 2
 }
 
 // ---------------------------------------------------------
@@ -570,48 +577,61 @@ function buildRecursosCasaPorCasaNacional(
     });
   }
 
-  // Resto de filas de RECURSOS se dejarán en 0 por ahora.
+  return items;
+}
+
+// ---------------------------------------------------------
+// Bloque: DIRECCIÓN (Días director)
+// ---------------------------------------------------------
+
+function buildDireccionCasaPorCasaNacional(
+  params: CasaPorCasaNacionalBuilderParams,
+): CotizacionItemBuild[] {
+  const { distribucion } = params;
+
+  const items: CotizacionItemBuild[] = [];
+
+  // Días director:
+  //  horasBase = díasProyecto * 2
+  //  horasTotales = horasBase + 4
+  //  costoInterno = horasTotales * 10
+  //  totalConComision = costoInterno / 0.4
+  const diasProyecto = distribucion.totalDiasCampoEncuestGlobal ?? 0; // ej. 15
+  const horasBase = diasProyecto * 2;
+  const horasTotales = horasBase + 4;
+
+  const COSTO_HORA_DIRECTOR = 10;
+  const costoInterno = round2(horasTotales * COSTO_HORA_DIRECTOR); // ej. 340
+  const totalConComision = round2(costoInterno / 0.4);             // ej. 850
+
+  items.push({
+    category: 'DIRECCIÓN',
+    description: 'Días director',
+    personas: 1,
+    dias: horasTotales,          // 34
+    costoUnitario: null,         // "-" en UI
+    costoTotal: null,            // "-" en UI
+    comisionable: true,
+    totalConComision,            // 850.00
+    orden: 30,
+  });
 
   return items;
 }
 
 // ---------------------------------------------------------
-// Bloque: DIRECCIÓN (Casa por casa / Nacional)
+// Realización Cuestionario
 // ---------------------------------------------------------
-
-// ----- Días director --------------------------------------
-
-function buildDiasDirector(
-  params: CasaPorCasaNacionalBuilderParams,
-): CotizacionItemBuild {
-  const { distribucion } = params;
-
-  const diasProyecto = distribucion.totalDiasCampoEncuestGlobal ?? 0; // ej. 15
-  const horasBase = diasProyecto * 2; // 2 horas por día
-  const horasTotales = horasBase + 4; // + 4 horas extras
-
-  const COSTO_HORA_DIRECTOR = 10;
-  const costoInterno = round2(horasTotales * COSTO_HORA_DIRECTOR); // ej. 340
-  const totalConComision = round2(costoInterno / 0.4); // ej. 850
-
-  return {
-    category: 'DIRECCIÓN',
-    description: 'Días director',
-    personas: 1,
-    dias: horasTotales,          // 34
-    costoUnitario: null,         // "-"
-    costoTotal: null,            // "-"
-    comisionable: true,
-    totalConComision,            // 850.00
-    orden: 30,
-  };
-}
-
-// ----- Realización Cuestionario ---------------------------
 //
-// Ver explicación en tu mensaje: total interno 65 US$,
-// total comisionado 162.50
-
+// investigacionHoras = 1.5 → 1.5 * 10 = 15
+// preguntasTotales   = duracionMin * 4
+// tiempoPregMin      = preguntasTotales * 5
+// horasPreg          = tiempoPregMin / 60
+// precioPreg         = horasPreg * 10 = 50
+// precioRealizacion  = 15 + 50 = 65
+// costoTotal         = 1 * 1 * 65
+// totalConComision   = 65 / 0.4 = 162.50
+//
 function buildRealizacionCuestionario(
   params: CasaPorCasaNacionalBuilderParams,
 ): CotizacionItemBuild {
@@ -625,11 +645,9 @@ function buildRealizacionCuestionario(
   const PRECIO_HORA = 10;
   const MARGEN_COMISION = 0.4;
 
-  // Investigación base
   const investigacionHoras = 1.5;
   const investigacionPrecio = investigacionHoras * PRECIO_HORA; // 15
 
-  // Tiempo por pregunta
   const preguntasTotales = duracionCuestionarioMin * PREGUNTAS_POR_MINUTO;
   const tiempoPorPreguntaMin = preguntasTotales * MINUTOS_POR_PREGUNTA;
   const horasTiempoPorPregunta = tiempoPorPreguntaMin / 60; // 300 / 60 = 5
@@ -647,7 +665,7 @@ function buildRealizacionCuestionario(
     description: 'Realización Cuestionario',
     personas,
     dias,
-    costoUnitario: null,
+    costoUnitario: null, // en Excel es "-"
     costoTotal,
     comisionable: true,
     totalConComision,
@@ -655,10 +673,18 @@ function buildRealizacionCuestionario(
   };
 }
 
-// ----- Supervisor (Script) --------------------------------
+// ---------------------------------------------------------
+// Supervisor (Script)
+// ---------------------------------------------------------
 //
-// Total interno = 28 US$, total con comisión = 70 US$.
-
+// Precios internos (hora = 8):
+//  - Programar pregunta: 1 min * #preguntas
+//  - Definir saltos/reglas: 1 min * #preguntas
+//  - Duración de prueba: duracionMin * 2
+//  - Cambios: 60 min fijos
+//
+// Solo se cobran estas 4 filas → 28 interno → 70 con comisión.
+//
 function buildSupervisorScript(
   params: CasaPorCasaNacionalBuilderParams,
 ): CotizacionItemBuild {
@@ -667,34 +693,36 @@ function buildSupervisorScript(
   const personas = realizamosScript ? 1 : 0;
   const dias = 1;
 
-  const PRECIO_HORA = 8;
-  const PREGUNTAS_POR_MINUTO = 4;
+  const PREG_POR_MIN = 4;
+  const PRECIO_HORA_SCRIPT = 8;
   const MARGEN_COMISION = 0.4;
 
-  const preguntasTotales = duracionCuestionarioMin * PREGUNTAS_POR_MINUTO;
+  const preguntasTotales = duracionCuestionarioMin * PREG_POR_MIN;
 
-  // tiempos en minutos según tu tabla
-  const tiempoEntenderMin = duracionCuestionarioMin * 2; // 30
-  const tiempoProgramarMin = preguntasTotales * 1;       // 60
-  const tiempoReglasMin = preguntasTotales * 1;          // 60
-  const tiempoPruebaMin = duracionCuestionarioMin * 2;   // 30
-  const tiempoCambiosMin = 60;                           // 60
+  // Programar una pregunta en Software
+  const minutosProgramar = preguntasTotales * 1;
+  const horasProgramar = minutosProgramar / 60;
+  const precioProgramar = horasProgramar * PRECIO_HORA_SCRIPT;
 
-  const costoEntender = (tiempoEntenderMin / 60) * PRECIO_HORA;   // 4
-  const costoProgramar = (tiempoProgramarMin / 60) * PRECIO_HORA; // 8
-  const costoReglas = (tiempoReglasMin / 60) * PRECIO_HORA;       // 8
-  const costoPrueba = (tiempoPruebaMin / 60) * PRECIO_HORA;       // 4
-  const costoCambios = (tiempoCambiosMin / 60) * PRECIO_HORA;     // 8
+  // Definir saltos y poner reglas
+  const minutosDefinir = preguntasTotales * 1;
+  const horasDefinir = minutosDefinir / 60;
+  const precioDefinir = horasDefinir * PRECIO_HORA_SCRIPT;
 
-  const precioInterno = round2(
-    costoEntender +
-      costoProgramar +
-      costoReglas +
-      costoPrueba +
-      costoCambios, // 28
-  );
+  // Duración de prueba
+  const minutosPrueba = duracionCuestionarioMin * 2;
+  const horasPrueba = minutosPrueba / 60;
+  const precioPrueba = horasPrueba * PRECIO_HORA_SCRIPT;
 
-  const costoTotal = round2(personas * dias * precioInterno); // 28 ó 0
+  // Cambios (60 min)
+  const minutosCambios = 60;
+  const horasCambios = minutosCambios / 60;
+  const precioCambios = horasCambios * PRECIO_HORA_SCRIPT;
+
+  const costoInterno =
+    precioProgramar + precioDefinir + precioPrueba + precioCambios; // 28
+
+  const costoTotal = round2(personas * dias * costoInterno);
   const totalConComision =
     personas > 0 ? round2(costoTotal / MARGEN_COMISION) : 0; // 70
 
@@ -707,14 +735,16 @@ function buildSupervisorScript(
     costoTotal,
     comisionable: true,
     totalConComision,
-    orden: 33,
+    orden: 34,
   };
 }
 
-// ----- Reporte de Resultados ------------------------------
+// ---------------------------------------------------------
+// Reporte de Resultados
+// ---------------------------------------------------------
 //
-// Total interno = 340 US$, total con comisión = 850 US$.
-
+// Usa duracionCuestionarioMin, 4 preg/min, 10 USD/hora.
+//
 function buildReporteResultados(
   params: CasaPorCasaNacionalBuilderParams,
 ): CotizacionItemBuild {
@@ -726,94 +756,354 @@ function buildReporteResultados(
   const personas = clienteSolicitaReporte ? 1 : 0;
   const dias = 1;
 
+  if (!clienteSolicitaReporte) {
+    return {
+      category: 'DIRECCIÓN',
+      description: 'Reporte de Resultados',
+      personas,
+      dias,
+      costoUnitario: null,
+      costoTotal: 0,
+      comisionable: true,
+      totalConComision: 0,
+      orden: 35,
+    };
+  }
+
+  const PREG_POR_MIN = 4;
   const PRECIO_HORA = 10;
-  const PREGUNTAS_POR_MINUTO = 4;
-  const PREGUNTAS_POR_DIAPO = 4;
   const MARGEN_COMISION = 0.4;
 
-  const preguntasTotales = duracionCuestionarioMin * PREGUNTAS_POR_MINUTO;
-  const diapositivas = preguntasTotales / PREGUNTAS_POR_DIAPO; // ej. 15
+  const preguntasTotales = duracionCuestionarioMin * PREG_POR_MIN;
+  const diapositivas = preguntasTotales / 4;
 
-  // Diseño: 180 min fijos
-  const disenoMin = 180;
-  const disenoCosto = (disenoMin / 60) * PRECIO_HORA; // 3h * 10 = 30
+  const minutosAHorasCosto = (minutos: number): number =>
+    (minutos / 60) * PRECIO_HORA;
 
-  // Procesamiento: 5 min por pregunta
-  const procMin = 5 * preguntasTotales;                // 300
-  const procCosto = (procMin / 60) * PRECIO_HORA;      // 5h * 10 = 50
+  const diseno = minutosAHorasCosto(180);                    // 3h
+  const procesamiento = minutosAHorasCosto(5 * preguntasTotales);
+  const graficas = minutosAHorasCosto(60 * diapositivas);
+  const revisionDatos = minutosAHorasCosto(10 * diapositivas);
+  const presentacionClientes = minutosAHorasCosto(120);
+  const ajustes = minutosAHorasCosto(390);
 
-  // Gráficas: 60 min por diapositiva
-  const graficasMin = 60 * diapositivas;               // 900
-  const graficasCosto = (graficasMin / 60) * PRECIO_HORA; // 15h * 10 = 150
+  const costoInterno =
+    diseno +
+    procesamiento +
+    graficas +
+    revisionDatos +
+    presentacionClientes +
+    ajustes; // ej. 340
 
-  // Revisión de datos: 10 min por diapositiva
-  const revisionMin = 10 * diapositivas;               // 150
-  const revisionCosto = (revisionMin / 60) * PRECIO_HORA; // 2.5h * 10 = 25
-
-  // Presentación a clientes: 120 min fijos
-  const presentacionMin = 120;
-  const presentacionCosto = (presentacionMin / 60) * PRECIO_HORA; // 2h * 10 = 20
-
-  // Ajustes: 390 min fijos
-  const ajustesMin = 390;
-  const ajustesCosto = (ajustesMin / 60) * PRECIO_HORA; // 6.5h * 10 = 65
-
-  const precioInterno = round2(
-    disenoCosto +
-      procCosto +
-      graficasCosto +
-      revisionCosto +
-      presentacionCosto +
-      ajustesCosto, // 340
-  );
-
-  const costoTotal = round2(personas * dias * precioInterno); // 340 ó 0
-  const totalConComision =
-    personas > 0 ? round2(costoTotal / MARGEN_COMISION) : 0;   // 850
+  const costoTotal = round2(personas * dias * costoInterno); // 340
+  const totalConComision = round2(costoTotal / MARGEN_COMISION); // 850
 
   return {
     category: 'DIRECCIÓN',
     description: 'Reporte de Resultados',
     personas,
     dias,
-    costoUnitario: null, // "-"
-    costoTotal,          // 340
+    costoUnitario: null,
+    costoTotal,
     comisionable: true,
-    totalConComision,    // 850
-    orden: 34,
+    totalConComision,
+    orden: 35,
   };
 }
 
 // ---------------------------------------------------------
+// Informe BI
+// ---------------------------------------------------------
+//
+// Fase 1 y 2: se arman con duracionCuestionarioMin, 4 preg/min, 10 USD/h.
+// Fase 3: costo interno fijo 221.27 que se suma por cada ola extra
+// por encima de 2 (base = 2 olas).
+//
+function buildInformeBi(
+  params: CasaPorCasaNacionalBuilderParams,
+): CotizacionItemBuild {
+  const {
+    duracionCuestionarioMin,
+    clienteSolicitaInformeBI,
+    numeroOlasBi,
+  } = params;
+
+  if (!clienteSolicitaInformeBI) {
+    return {
+      category: 'DIRECCIÓN',
+      description: 'Informe BI',
+      personas: 0,
+      dias: 1,
+      costoUnitario: null,
+      costoTotal: 0,
+      comisionable: true,
+      totalConComision: 0,
+      orden: 36,
+    };
+  }
+
+  const PREG_POR_MIN = 4;
+  const PRECIO_HORA_BI = 10;
+  const MIN_PREG_GRAFICAS = 60;
+  const MARGEN_COMISION = 0.4;
+
+  const preguntasTotales = duracionCuestionarioMin * PREG_POR_MIN;
+  const preguntasParaGraficas = Math.max(preguntasTotales, MIN_PREG_GRAFICAS);
+  const diapositivas = preguntasParaGraficas / 4;
+
+  const minutosAHorasCosto = (minutos: number): number =>
+    (minutos / 60) * PRECIO_HORA_BI;
+
+  // ----- Fase 1 y 2 -----
+  const softwareYAlojamiento = 100;
+  const diseno = minutosAHorasCosto(360);                    // 6h
+  const adecuacionDatos = minutosAHorasCosto(5 * preguntasTotales);
+  const identificacionSegmentadores = minutosAHorasCosto(30);
+  const graficas = minutosAHorasCosto(60 * diapositivas);
+  const revisionDatos = minutosAHorasCosto(10 * diapositivas);
+  const revisionPreliminarClientes = minutosAHorasCosto(120);
+  const presentacionClientes = minutosAHorasCosto(120);
+  const ajustes = minutosAHorasCosto(360);
+
+  let costoInterno =
+    softwareYAlojamiento +
+    diseno +
+    adecuacionDatos +
+    identificacionSegmentadores +
+    graficas +
+    revisionDatos +
+    revisionPreliminarClientes +
+    presentacionClientes +
+    ajustes; // ej. 473.33
+
+  // ----- Fase 3 (olas extras > 2) -----
+  const COSTO_INTERNO_FASE3 = 221.27;
+
+  const olas = numeroOlasBi && numeroOlasBi >= 2 ? numeroOlasBi : 2;
+  const olasExtras = Math.max(0, olas - 2);
+
+  if (olasExtras > 0) {
+    costoInterno += COSTO_INTERNO_FASE3 * olasExtras;
+  }
+
+  const costoTotal = round2(costoInterno);
+  const totalConComision = round2(costoTotal / MARGEN_COMISION);
+
+  return {
+    category: 'DIRECCIÓN',
+    description: 'Informe BI',
+    personas: 1,
+    dias: olas, // 2 base, 3 si hay una ola extra, etc.
+    costoUnitario: null,
+    costoTotal,
+    comisionable: true,
+    totalConComision,
+    orden: 36,
+  };
+}
+
+// ---------------------------------------------------------
+// PROCESAMIENTO: Codificación
+// ---------------------------------------------------------
+//
+// Tabla de ayuda:
+//
+// Total entrevistas  → totalEntrevistas
+// Duración (min)    → duracionCuestionarioMin
+// Param. preg/min   → 4
+// Preguntas totales → duracion * 4
+// Preguntas abiertas (10%) → preguntasTotales * 0.1
+//
+// costoBase            = totalEntrevistas * pregAbiertas * 0.02
+// costoYaComisionable  = costoBase / 0.4      → 300
+// totalConComision     = costoYaComisionable / 0.4 → 750
+//
+// Fila final:
+//   Codificación   1  1   "-"   300   Sí   750
+//
+function buildCodificacionProcesamiento(
+  params: CasaPorCasaNacionalBuilderParams,
+): CotizacionItemBuild {
+  const { totalEntrevistas, duracionCuestionarioMin } = params;
+
+  // Constantes de codificación
+  const PREG_POR_MIN = 4;
+  const PORC_PREG_ABIERTAS = 0.1;   // 10 %
+  const COSTO_POR_RESPUESTA = 0.02; // 0.02 US$ por respuesta
+  const MARGEN_COMISION = 0.4;      // se divide entre 0.4
+
+  // 1) Preguntas totales
+  const preguntasTotales = duracionCuestionarioMin * PREG_POR_MIN;
+
+  // 2) Preguntas abiertas (10% del total)
+  const preguntasAbiertas = preguntasTotales * PORC_PREG_ABIERTAS; // ej. 6
+
+  // 3) Costo base interno
+  const costoBase =
+    totalEntrevistas * preguntasAbiertas * COSTO_POR_RESPUESTA; // ej. 120
+
+  // 4) Costo ya comisionable (primer /0.4)
+  const costoYaComisionable = round2(costoBase / MARGEN_COMISION); // ej. 300
+
+  // 5) Total final (segundo /0.4)
+  const totalConComision = round2(
+    costoYaComisionable / MARGEN_COMISION,
+  ); // ej. 750
+
+  return {
+    category: 'PROCESAMIENTO',
+    description: 'Codificación',
+    personas: 1,
+    dias: 1,
+    costoUnitario: null,          // en la hoja se muestra "-"
+    costoTotal: costoYaComisionable,
+    comisionable: true,
+    totalConComision,
+    orden: 50,                    // ponlo donde quieras en el orden
+  };
+}
+
+// ---------------------------------------------------------
+// PROCESAMIENTO: Control de Calidad
+// ---------------------------------------------------------
+//
+// Total entrevistas  → totalEntrevistas
+// Duración (min)     → duracionCuestionarioMin
+//
+// minutosEscucha   = totalEntrevistas * duracionCuestionarioMin  → 15000
+// horasEscucha     = minutosEscucha / 60                          → 250
+// costoBase        = horasEscucha * PRECIO_HORA_CC                → 500
+// totalConComision = costoBase / 0.4                              → 1250
+//
+// Fila:
+//   Control de Calidad   1   15000   "-"   500   Sí   1250
+//
+function buildControlCalidadProcesamiento(
+  params: CasaPorCasaNacionalBuilderParams,
+): CotizacionItemBuild {
+  const { totalEntrevistas, duracionCuestionarioMin } = params;
+
+  const PRECIO_HORA_CC = 2;   // $2 la hora de escucha
+  const MARGEN_COMISION = 0.4;
+
+  // 1) Minutos totales de escucha
+  const minutosEscucha = totalEntrevistas * duracionCuestionarioMin; // ej. 15000
+
+  // 2) Horas
+  const horasEscucha = minutosEscucha / 60; // ej. 250
+
+  // 3) Costo base interno
+  const costoBase = round2(horasEscucha * PRECIO_HORA_CC); // ej. 500
+
+  // 4) Total con comisión
+  const totalConComision = round2(costoBase / MARGEN_COMISION); // ej. 1250
+
+  return {
+    category: 'PROCESAMIENTO',
+    description: 'Control de Calidad',
+    personas: 1,
+    dias: minutosEscucha,    // en la tabla aparece 15000
+    costoUnitario: null,     // se muestra "-" en el Excel
+    costoTotal: costoBase,   // 500
+    comisionable: true,
+    totalConComision,        // 1250
+    orden: 51,               // ponlo después de Codificación
+  };
+}
+
+
+
+// ---------------------------------------------------------
+// PROCESAMIENTO: Base + Limpieza (digital)
+// ---------------------------------------------------------
+function buildBaseLimpiezaProcesamiento(
+  params: CasaPorCasaNacionalBuilderParams,
+): CotizacionItemBuild {
+  const { duracionCuestionarioMin } = params;
+
+  // Constantes según tu explicación
+  const PREGUNTAS_POR_MINUTO = 4;      // 4 preguntas por minuto
+  const MINUTOS_BASE_POR_PREGUNTA = 10; // 10 min por pregunta
+  const PRECIO_HORA = 10;             // 10 USD/hora
+  const MARGEN_COMISION = 0.4;        // dividir entre 0.4
+
+  // Preguntas totales = duración * 4
+  const preguntasTotales = duracionCuestionarioMin * PREGUNTAS_POR_MINUTO;
+
+  // Minutos totales = preguntasTotales * 10
+  const minutosTotales = preguntasTotales * MINUTOS_BASE_POR_PREGUNTA;
+
+  // Horas = minutosTotales / 60
+  const horas = minutosTotales / 60;
+
+  // Precio interno = horas * 10
+  const costoTotal = round2(horas * PRECIO_HORA); // ej. 66.67 si dur = 10
+
+  // Como es comisionable → dividir entre 0.4
+  const totalConComision = round2(costoTotal / MARGEN_COMISION); // ej. 166.67
+
+  return {
+    category: 'PROCESAMIENTO',
+    description: 'Base + Limpieza (digital)',
+    personas: 1,
+    dias: 0,                // en la tabla se muestra 0.00
+    costoUnitario: PRECIO_HORA, // 10 (referencia, aunque el total no sale de B*C*D)
+    costoTotal,
+    comisionable: true,
+    totalConComision,
+    orden: 52,              // después de Control de Calidad
+  };
+}
+
+
+// ---------------------------------------------------------
 // Builder principal: Casa por casa / Nacional (interno)
 // ---------------------------------------------------------
-
 export function buildCasaPorCasaNacional(
   params: CasaPorCasaNacionalBuilderParams,
 ): CasaPorCasaNacionalBuildResult {
   const trabajoCampo = buildTrabajoCampoCasaPorCasaNacional(params);
   const recursos = buildRecursosCasaPorCasaNacional(params);
-  const diasDirector = buildDiasDirector(params);
+  const direccion = buildDireccionCasaPorCasaNacional(params);
   const realizacionCuestionario = buildRealizacionCuestionario(params);
   const supervisorScript = buildSupervisorScript(params);
   const reporteResultados = buildReporteResultados(params);
+  const informeBi = buildInformeBi(params);
+  const codificacion = buildCodificacionProcesamiento(params);
+  const controlCalidad = buildControlCalidadProcesamiento(params);
+  const baseLimpieza = buildBaseLimpiezaProcesamiento(params);
 
   const items: CotizacionItemBuild[] = [
+    // TRABAJO DE CAMPO
     ...trabajoCampo,
+
+    // RECURSOS
     ...recursos,
-    diasDirector,
+
+    // DIRECCIÓN
+    ...direccion,
     realizacionCuestionario,
     supervisorScript,
     reporteResultados,
+    informeBi,
+
+    // PROCESAMIENTO
+    codificacion,
+    controlCalidad,
+    baseLimpieza,
   ];
 
-  const totalCobrar = round2(
-    items.reduce(
-      (acc, it) => acc + (it.totalConComision ?? 0),
-      0,
-    ),
+  // 1) Suma de todos los "Total" (totalConComision)
+  const sumaTotal = items.reduce(
+    (acc, it) => acc + (it.totalConComision ?? 0),
+    0,
   );
 
+  // 2) Aplicar CEILING(SUM(tCoti[Total]), 10)
+  //    → redondear SIEMPRE hacia arriba al siguiente múltiplo de 10
+  const totalCobrar = Math.ceil(sumaTotal / 10) * 10;
+
+  // 3) Costo por entrevista = A COBRAR / totalEntrevistas
   const costoPorEntrevista =
     params.totalEntrevistas > 0
       ? round2(totalCobrar / params.totalEntrevistas)
@@ -826,17 +1116,11 @@ export function buildCasaPorCasaNacional(
   };
 }
 
+
 // ---------------------------------------------------------
 // FUNCIÓN QUE USA EL SERVICE
 // ---------------------------------------------------------
 
-/**
- * Builder principal que usa el service de cotizaciones.
- *
- * - Ejecuta el motor NACIONAL (distribución, rendimiento, etc.)
- * - Construye los bloques TRABAJO DE CAMPO, RECURSOS y DIRECCIÓN
- * - Devuelve items, totalCobrar y costoPorEntrevista
- */
 export function buildCotizacionCasaPorCasa(
   input: BuildCotizacionCasaPorCasaInput,
 ): CasaPorCasaNacionalBuildResult {
@@ -926,10 +1210,14 @@ export function buildCotizacionCasaPorCasa(
     cobertura: input.cobertura,
     supervisores: input.supervisores,
     encuestadoresTotales: input.encuestadoresTotales,
-    realizamosCuestionario: input.realizamosCuestionario,
-    realizamosScript: input.realizamosScript,
-    clienteSolicitaReporte: input.clienteSolicitaReporte,
-    factorComisionable: 1,   // 100 %
+
+    realizamosCuestionario: input.realizamosCuestionario ?? false,
+    realizamosScript: input.realizamosScript ?? false,
+    clienteSolicitaReporte: input.clienteSolicitaReporte ?? false,
+    clienteSolicitaInformeBI: input.clienteSolicitaInformeBI ?? false,
+    numeroOlasBi: input.numeroOlasBi ?? 2,
+
+    factorComisionable: 1,      // 100 %
     factorNoComisionable: 0.05, // 5 %
     distribucion,
   };

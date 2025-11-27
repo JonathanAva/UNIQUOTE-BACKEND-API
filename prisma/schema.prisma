@@ -14,101 +14,103 @@ datasource db {
 }
 
 // =====================================================
+// ENUMS
+// =====================================================
+
+/// Estados de la cotización para manejar el flujo comercial
+/// En el frontend puedes mapearlos a textos bonitos:
+/// ENVIADO → "Enviado", NEGOCIACION → "Negociación", etc.
+enum CotizacionStatus {
+  ENVIADO
+  NEGOCIACION
+  APROBADO
+  NO_APROBADO
+  EN_PAUSA
+  REEMPLAZADA
+}
+
+// =====================================================
 // MODELO: Role
-// - Catálogo de roles de usuario (administrador, gerente, etc.)
 // =====================================================
 model Role {
-  id        Int      @id @default(autoincrement()) // PK autoincremental
-  name      String   @unique // nombre único del rol
-  users     User[] // relación 1:N con User
-  createdAt DateTime @default(now()) // fecha de creación
-  updatedAt DateTime @updatedAt // fecha de última actualización
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // =====================================================
 // MODELO: User
-// - Usuarios del sistema que se autentican en la API
-// - Tienen un rol, pueden crear proyectos y cotizaciones
 // =====================================================
 model User {
-  id                Int       @id @default(autoincrement()) // PK autoincremental
-  name              String // nombre
-  lastName          String // apellido
-  email             String    @unique // correo único
-  phone             String // teléfono
-  password          String // password hasheado
-  roleId            Int // FK a Role
+  id                Int       @id @default(autoincrement())
+  name              String
+  lastName          String
+  email             String    @unique
+  phone             String
+  password          String
+  roleId            Int
   role              Role      @relation(fields: [roleId], references: [id])
-  mfaLastVerifiedAt DateTime? // última verificación MFA (opcional)
+  mfaLastVerifiedAt DateTime?
 
-  createdAt DateTime @default(now()) // fecha de creación
-  updatedAt DateTime @updatedAt // fecha de última actualización
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Relaciones 1:N con entidades de seguridad
-  emailOtps      EmailOtp[] // códigos MFA por correo
-  trustedDevices TrustedDevice[] // dispositivos de confianza
+  emailOtps      EmailOtp[]
+  trustedDevices TrustedDevice[]
 
-  // Relaciones 1:N con entidades de negocio
-  projects     Project[] // proyectos creados por el usuario
-  cotizaciones Cotizacion[] // cotizaciones creadas por el usuario
+  projects     Project[]
+  cotizaciones Cotizacion[]
 }
 
 // =====================================================
 // MODELO: Cliente
-// - Empresa cliente (Pizza Hut, etc.)
-// - Tiene múltiples contactos y múltiples proyectos
 // =====================================================
 model Cliente {
-  id          Int      @id @default(autoincrement()) // PK autoincremental
-  empresa     String // nombre corto de la empresa
-  razonSocial String // razón social completa
-  createdAt   DateTime @default(now()) // fecha de creación
-  updatedAt   DateTime @updatedAt // fecha de última actualización
+  id          Int      @id @default(autoincrement())
+  empresa     String
+  razonSocial String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  // relación 1:N con ContactoEmpresa
   contactos ContactoEmpresa[]
+  projects  Project[]
 
-  // relación 1:N con Project (un cliente puede tener muchos proyectos)
-  projects Project[]
-
-  // Restricción de unicidad: misma empresa + razón social no se repite
   @@unique([empresa, razonSocial])
   @@index([empresa])
 }
 
 // =====================================================
 // MODELO: ContactoEmpresa
-// - Persona de contacto dentro de un cliente
-// - Puede asociarse a uno o varios proyectos
 // =====================================================
 model ContactoEmpresa {
-  id        Int     @id @default(autoincrement()) // PK autoincremental
-  clienteId Int // FK a Cliente
+  id        Int     @id @default(autoincrement())
+  clienteId Int
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
-  nombre    String // nombre del contacto
-  email     String   @unique // correo (único global)
-  telefono  String // teléfono
-  createdAt DateTime @default(now()) // fecha de creación
-  updatedAt DateTime @updatedAt // fecha de última actualización
+  nombre    String
+  email     String   @unique
+  telefono  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // proyectos que utilizan este contacto
-  projects Project[]
+  projects     Project[]
+  cotizaciones Cotizacion[]
 
   @@index([clienteId])
 }
 
 // =====================================================
 // MODELO: EmailOtp
-// - Códigos temporales (OTP) para MFA por correo electrónico
 // =====================================================
 model EmailOtp {
-  id        Int      @id @default(autoincrement()) // PK autoincremental
-  userId    Int // FK a User
+  id        Int      @id @default(autoincrement())
+  userId    Int
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash  String // hash del código numérico
-  expiresAt DateTime // fecha/hora de expiración
-  createdAt DateTime @default(now()) // fecha de creación
+  codeHash  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([expiresAt])
@@ -116,58 +118,45 @@ model EmailOtp {
 
 // =====================================================
 // MODELO: TrustedDevice
-// - Dispositivos marcados como "de confianza" para MFA
 // =====================================================
 model TrustedDevice {
-  id           Int      @id @default(autoincrement()) // PK autoincremental
-  userId       Int // FK a User
+  id           Int      @id @default(autoincrement())
+  userId       Int
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceId     String // identificador lógico del dispositivo (cookie)
-  lastVerified DateTime // última vez que pasó MFA
-  expiresAt    DateTime // fecha de expiración de la confianza
-  createdAt    DateTime @default(now()) // fecha de creación
-  updatedAt    DateTime @updatedAt // fecha de última actualización
+  deviceId     String
+  lastVerified DateTime
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  @@unique([userId, deviceId]) // un deviceId único por usuario
+  @@unique([userId, deviceId])
   @@index([userId])
   @@index([expiresAt])
 }
 
 // =====================================================
 // MODELO: Project
-// - Proyecto de investigación asociado a un cliente y contacto
-// - Agrupa varias cotizaciones (casa por casa, punto de afluencia, etc.)
 // =====================================================
 model Project {
-  id Int @id @default(autoincrement()) // PK autoincremental
+  id Int @id @default(autoincrement())
 
-  // Cliente propietario del proyecto
   clienteId Int
   cliente   Cliente @relation(fields: [clienteId], references: [id])
 
-  // Contacto principal del proyecto (opcional)
   contactoId Int?
   contacto   ContactoEmpresa? @relation(fields: [contactoId], references: [id])
 
-  // Nombre libre del proyecto (ej. "Casa por casa Noviembre 2025")
-  name String
-
-  // Tipo de proyecto / tipo de entrevista
-  // (Casa por casa, Punto de afluencia, Centro Comercial, Telefónico, Online, etc.)
+  name        String
   projectType String
+  studyType   String
 
-  // Tipo de estudio (Cuantitativo, Cualitativo, etc.)
-  studyType String
-
-  // Usuario que creó el proyecto (gerente/director)
   createdById Int
   createdBy   User @relation(fields: [createdById], references: [id])
 
-  // Relación 1:N: un proyecto tiene muchas cotizaciones
   cotizaciones Cotizacion[]
 
-  createdAt DateTime @default(now()) // fecha de creación
-  updatedAt DateTime @updatedAt // fecha de última actualización
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([clienteId])
   @@index([projectType])
@@ -175,103 +164,84 @@ model Project {
 
 // =====================================================
 // MODELO: Cotizacion
-// - Cotización concreta dentro de un proyecto
-// - Contiene los inputs principales y los totales calculados
-// - Tiene items de detalle (TRABAJO DE CAMPO, RECURSOS, etc.)
 // =====================================================
 model Cotizacion {
-  id Int @id @default(autoincrement()) // PK autoincremental
+  id Int @id @default(autoincrement())
 
-  // Proyecto al que pertenece esta cotización
   projectId Int
   project   Project @relation(fields: [projectId], references: [id])
+
+  // Contacto específico de ese cliente para esta cotización (opcional)
+  contactoId Int?
+  contacto   ContactoEmpresa? @relation(fields: [contactoId], references: [id])
+
+  // Nombre amigable de la cotización
+  name String
 
   // Código interno legible (ej. "COT-<projectId>-<secuencia>")
   code String
 
-  // Estado de la cotización (draft, en_revision, aprobado, rechazado, etc.)
-  status String @default("draft")
+  status CotizacionStatus @default(ENVIADO)
 
-  // Usuario que creó la cotización (gerente/director)
   createdById Int
   createdBy   User @relation(fields: [createdById], references: [id])
 
   // ----------------------------
   // Inputs principales de negocio
   // ----------------------------
-  totalEntrevistas         Int // total de entrevistas del estudio
-  duracionCuestionarioMin  Int // duración del cuestionario en minutos
-  tipoEntrevista           String // tipo de entrevista (casa por casa, telefónico, etc.)
-  penetracionCategoria     String // "facil" | "medio" | "dificil"
-  cobertura                String // Nacional, Urbano, AMSS, etc.
-  supervisores             Int // cantidad de supervisores
-  encuestadoresTotales     Int // cantidad total de encuestadores
-  realizamosCuestionario   Boolean // ¿UNIMER realiza el cuestionario?
-  realizamosScript         Boolean // ¿UNIMER realiza el script?
-  clienteSolicitaReporte   Boolean // ¿Cliente solicita reporte?
-  clienteSolicitaInformeBI Boolean // ¿Cliente solicita informe BI?
-  incentivoTotal           Decimal? @db.Decimal(12, 2) // monto total de incentivos (si aplica)
+  totalEntrevistas         Int
+  duracionCuestionarioMin  Int
+  tipoEntrevista           String
+  penetracionCategoria     String
+  cobertura                String
+  supervisores             Int
+  encuestadoresTotales     Int
+  realizamosCuestionario   Boolean
+  realizamosScript         Boolean
+  clienteSolicitaReporte   Boolean
+  clienteSolicitaInformeBI Boolean
+  incentivoTotal           Decimal? @db.Decimal(12, 2)
 
   // ----------------------------
   // Totales / resultados globales
   // ----------------------------
-  factorComisionablePct   Decimal? @db.Decimal(5, 2) // factor comisionable (ej. 100.00)
-  factorNoComisionablePct Decimal? @db.Decimal(5, 2) // factor no comisionable (ej. 5.00)
-  totalCobrar             Decimal? @db.Decimal(14, 2) // "A COBRAR"
-  costoPorEntrevista      Decimal? @db.Decimal(14, 4) // "COSTO X ENTREVISTA"
+  factorComisionablePct   Decimal? @db.Decimal(5, 2)
+  factorNoComisionablePct Decimal? @db.Decimal(5, 2)
+  totalCobrar             Decimal? @db.Decimal(14, 2)
+  costoPorEntrevista      Decimal? @db.Decimal(14, 4)
 
-  // Detalle de la cotización (filas de TRABAJO DE CAMPO, RECURSOS, etc.)
   items CotizacionItem[]
 
-  createdAt DateTime @default(now()) // fecha de creación
-  updatedAt DateTime @updatedAt // fecha de última actualización
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([projectId])
   @@index([status])
+  @@index([contactoId])
+  // índice combinado útil para stats por cliente + contacto
+  @@index([projectId, contactoId])
 }
 
 // =====================================================
 // MODELO: CotizacionItem
-// - Fila de detalle de una cotización
-// - Representa elementos como: Dirección Trabajo Campo,
-//   Capacitación, Viáticos, Transporte, Hotel, etc.
 // =====================================================
 model CotizacionItem {
-  id           Int        @id @default(autoincrement()) // PK autoincremental
-  cotizacionId Int // FK a Cotizacion
+  id           Int        @id @default(autoincrement())
+  cotizacionId Int
   cotizacion   Cotizacion @relation(fields: [cotizacionId], references: [id])
 
-  // Grupo principal: "TRABAJO DE CAMPO", "RECURSOS",
-  // "DIRECCIÓN", "PROCESAMIENTO", "ELEMENTOS EXTRA", etc.
-  category String
-
-  // Descripción específica de la fila:
-  // "Dirección Trabajo Campo", "Capacitación", "Viáticos", etc.
-  description String
-
-  // "# pers/encues/grp" (puede ser entero o con decimales)
-  personas Decimal? @db.Decimal(12, 2)
-
-  // "# días/pág." (días de campo / páginas / unidades de tiempo)
-  dias Decimal? @db.Decimal(12, 2)
-
-  // "Costo US$" (costo unitario en dólares)
-  costoUnitario Decimal? @db.Decimal(14, 4)
-
-  // "Costo total US$" (costoUnitario * personas * días, etc.)
-  costoTotal Decimal? @db.Decimal(14, 4)
-
-  // Indica si la partida es comisionable (Sí/No en el Excel)
-  comisionable Boolean
-
-  // "Total" considerando factores comisionables / no comisionables
+  category         String
+  description      String
+  personas         Decimal? @db.Decimal(12, 2)
+  dias             Decimal? @db.Decimal(12, 2)
+  costoUnitario    Decimal? @db.Decimal(14, 4)
+  costoTotal       Decimal? @db.Decimal(14, 4)
+  comisionable     Boolean
   totalConComision Decimal? @db.Decimal(14, 4)
+  orden            Int
 
-  // Orden para mostrar las filas en el mismo orden que el Excel
-  orden Int
-
-  createdAt DateTime @default(now()) // fecha de creación
-  updatedAt DateTime @updatedAt // fecha de última actualización
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([cotizacionId])
   @@index([category])

@@ -1,13 +1,14 @@
+// src/modules/cotizaciones/dto/update-cotizacion-status.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsString } from 'class-validator';
+import { IsEnum } from 'class-validator';
+import { CotizacionStatus } from '@prisma/client';
 
 export class UpdateCotizacionStatusDto {
   @ApiProperty({
+    enum: CotizacionStatus,
     description: 'Nuevo estado de la cotización',
-    example: 'aprobado',
-    enum: ['draft', 'en_revision', 'aprobado', 'rechazado'],
+    example: CotizacionStatus.NEGOCIACION,
   })
-  @IsString()
-  @IsIn(['draft', 'en_revision', 'aprobado', 'rechazado'])
-  status: string;
+  @IsEnum(CotizacionStatus)
+  status: CotizacionStatus;
 }

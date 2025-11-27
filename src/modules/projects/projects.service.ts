@@ -1,9 +1,11 @@
+// src/modules/cotizaciones/projects/projects.service.ts
 import {
   Injectable,
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@/infra/database/prisma.service';
+
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
@@ -99,6 +101,7 @@ export class ProjectsService {
 
   /**
    * Detalle de un proyecto con sus cotizaciones incluidas.
+   * Útil para la “biblioteca” de cotizaciones por proyecto.
    */
   async findOneWithCotizaciones(id: number) {
     const project = await this.prisma.project.findUnique({
@@ -124,11 +127,15 @@ export class ProjectsService {
           select: {
             id: true,
             code: true,
+            name: true,
             status: true,
             totalEntrevistas: true,
             totalCobrar: true,
             costoPorEntrevista: true,
             createdAt: true,
+            contacto: {
+              select: { id: true, nombre: true, email: true },
+            },
             createdBy: {
               select: { id: true, name: true, lastName: true },
             },
@@ -151,11 +158,8 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('Proyecto no encontrado');
 
-    // Regla de negocio opcional: solo quien lo creó o admins pueden editar
-    // (modifícalo según tu lógica de roles)
+    // Regla de negocio opcional: solo quien lo creó puede editar
     if (project.createdById !== userId) {
-      // Aquí podrías preguntar a la tabla Role, etc.
-      // Por ahora solo valida que sea el creador.
       throw new ForbiddenException(
         'Solo el usuario que creó el proyecto puede editarlo',
       );
@@ -205,15 +209,12 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('Proyecto no encontrado');
 
-    // misma regla opcional que en update
     if (project.createdById !== userId) {
       throw new ForbiddenException(
         'Solo el usuario que creó el proyecto puede eliminarlo',
       );
     }
 
-    // OJO: si hay cotizaciones asociadas, Prisma no dejará borrar
-    // salvo que configures onDelete: Cascade en el modelo.
     await this.prisma.project.delete({ where: { id } });
     return { deleted: true };
   }

@@ -1,3 +1,4 @@
+// src/modules/cotizaciones/dto/create-cotizacion.dto.ts
 import {
   IsBoolean,
   IsInt,
@@ -16,6 +17,24 @@ export class CreateCotizacionDto {
   })
   @IsInt()
   projectId: number;
+
+  @ApiProperty({
+    description: 'Nombre amigable de la cotización',
+    example: 'Ola 1 – Casa por casa noviembre',
+  })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({
+    description:
+      'ID del contacto de la empresa asociado a esta cotización (opcional)',
+    example: 3,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  contactoId?: number;
 
   @ApiProperty({
     description: 'Total de entrevistas del estudio',
@@ -101,6 +120,17 @@ export class CreateCotizacionDto {
   })
   @IsBoolean()
   clienteSolicitaInformeBI: boolean;
+
+  @ApiProperty({
+    description:
+      'Número de olas para BI (base 2, si es 3 significa una ola extra)',
+    example: 2,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  numeroOlasBi?: number;
 
   @ApiProperty({
     description: 'Monto total de incentivos (opcional)',

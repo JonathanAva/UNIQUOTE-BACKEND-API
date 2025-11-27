@@ -1,3 +1,4 @@
+// src/modules/contactos/contactos.service.ts
 import {
   ConflictException,
   Injectable,
@@ -6,6 +7,7 @@ import {
 import { PrismaService } from '@/infra/database/prisma.service';
 import { CreateContactoDto } from './dto/create-contacto.dto';
 import { UpdateContactoDto } from './dto/update-contacto.dto';
+import { CotizacionStatus } from '@prisma/client';
 
 @Injectable()
 // Servicio con lógica de negocio de contactos de empresa
@@ -20,14 +22,13 @@ export class ContactosService {
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    // valida email único global (o por cliente si lo configuraste así)
+    // valida email único global
     const dupEmail = await this.prisma.contactoEmpresa.findUnique({
       where: { email: dto.email },
       select: { id: true },
     });
     if (dupEmail) throw new ConflictException('El correo ya está registrado');
 
-    // Crea el contacto asociado al cliente indicado
     const created = await this.prisma.contactoEmpresa.create({
       data: {
         clienteId: Number(dto.clienteId),
@@ -47,9 +48,12 @@ export class ContactosService {
     return created;
   }
 
+  /**
+   * Lista todos los contactos de un cliente con stats de cotizaciones
+   * aprobadas para cada contacto.
+   */
   async findAllByCliente(clienteId: number) {
-    // Lista todos los contactos de un cliente específico
-    return this.prisma.contactoEmpresa.findMany({
+    const contactos = await this.prisma.contactoEmpresa.findMany({
       where: { clienteId },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -60,12 +64,40 @@ export class ContactosService {
         telefono: true,
         createdAt: true,
         updatedAt: true,
+        cotizaciones: {
+          select: { status: true },
+        },
       },
+    });
+
+    return contactos.map((c) => {
+      const totalCotizaciones = c.cotizaciones.length;
+      const aprobadas = c.cotizaciones.filter(
+        (ct) => ct.status === CotizacionStatus.APROBADO,
+      ).length;
+      const porcentajeAprobadas =
+        totalCotizaciones > 0
+          ? Number(((aprobadas / totalCotizaciones) * 100).toFixed(2))
+          : 0;
+
+      return {
+        id: c.id,
+        clienteId: c.clienteId,
+        nombre: c.nombre,
+        email: c.email,
+        telefono: c.telefono,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        stats: {
+          totalCotizaciones,
+          aprobadas,
+          porcentajeAprobadas,
+        },
+      };
     });
   }
 
   async findOne(id: number) {
-    // Obtiene datos de un contacto por ID
     const c = await this.prisma.contactoEmpresa.findUnique({
       where: { id },
       select: {
@@ -83,7 +115,9 @@ export class ContactosService {
   }
 
   async update(id: number, dto: UpdateContactoDto) {
-    const current = await this.prisma.contactoEmpresa.findUnique({ where: { id } });
+    const current = await this.prisma.contactoEmpresa.findUnique({
+      where: { id },
+    });
     if (!current) throw new NotFoundException('Contacto no encontrado');
 
     // si cambia email, valida unicidad
@@ -104,7 +138,6 @@ export class ContactosService {
       if (!cliente) throw new NotFoundException('Cliente destino no existe');
     }
 
-    // Aplica la actualización
     return this.prisma.contactoEmpresa.update({
       where: { id },
       data: dto,
@@ -120,7 +153,9 @@ export class ContactosService {
   }
 
   async remove(id: number) {
-    const exists = await this.prisma.contactoEmpresa.findUnique({ where: { id } });
+    const exists = await this.prisma.contactoEmpresa.findUnique({
+      where: { id },
+    });
     if (!exists) throw new NotFoundException('Contacto no encontrado');
     await this.prisma.contactoEmpresa.delete({ where: { id } });
     return { deleted: true };

@@ -1,5 +1,4 @@
 // src/modules/cotizaciones/cotizaciones.service.ts
-
 import {
   BadRequestException,
   ForbiddenException,
@@ -10,9 +9,10 @@ import { PrismaService } from '@/infra/database/prisma.service';
 import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
+import { CotizacionStatus } from '@prisma/client';
 
 // Builder para "Casa por casa"
-import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder'; 
+import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder';
 
 @Injectable()
 export class CotizacionesService {
@@ -40,27 +40,42 @@ export class CotizacionesService {
 
   /**
    * Punto de entrada principal para crear una cotización.
-   * Aquí se guardan los datos base y, según el tipo de entrevista,
-   * se delega al *builder* correspondiente (casa por casa, telefónico, etc.).
    */
   async create(dto: CreateCotizacionDto, createdById: number) {
-    // 1) Verifica que exista el proyecto
+    // 1) Verifica que exista el proyecto y obtenemos el cliente
     const project = await this.prisma.project.findUnique({
       where: { id: dto.projectId },
-      select: { id: true },
+      select: { id: true, clienteId: true },
     });
     if (!project) throw new NotFoundException('Proyecto no encontrado');
 
+    // 2) Si viene contactoId, validar que pertenezca al cliente del proyecto
+    if (dto.contactoId) {
+      const contacto = await this.prisma.contactoEmpresa.findFirst({
+        where: {
+          id: dto.contactoId,
+          clienteId: project.clienteId,
+        },
+        select: { id: true },
+      });
+      if (!contacto) {
+        throw new NotFoundException(
+          'El contacto no pertenece al cliente del proyecto',
+        );
+      }
+    }
+
     const code = await this.generateCotizacionCode(dto.projectId);
 
-    // 2) Crea la cotización con los inputs base
-    //    dto.totalEntrevistas = Ingresar!H4 (total que da el cliente)
+    // 3) Crea la cotización con los inputs base
     const cotizacion = await this.prisma.cotizacion.create({
       data: {
         projectId: dto.projectId,
+        contactoId: dto.contactoId ?? null,
+        name: dto.name,
         code,
         createdById,
-        status: 'draft', // por defecto
+        status: CotizacionStatus.ENVIADO, // estado inicial
 
         totalEntrevistas: dto.totalEntrevistas,
         duracionCuestionarioMin: dto.duracionCuestionarioMin,
@@ -74,16 +89,13 @@ export class CotizacionesService {
         clienteSolicitaReporte: dto.clienteSolicitaReporte,
         clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
         incentivoTotal: dto.incentivoTotal ?? null,
-        // factorComisionablePct / factorNoComisionablePct
-        // y totales globales se podrán llenar después
       },
     });
 
-    // 3) Delegar a builder según tipo de entrevista
+    // 4) Delegar a builder según tipo de entrevista
     const tipoEntrevistaLower = dto.tipoEntrevista.trim().toLowerCase();
 
     if (tipoEntrevistaLower === 'casa por casa') {
-      // Por ahora solo soportamos cobertura "Nacional" dentro del builder.
       const buildResult = buildCotizacionCasaPorCasa({
         totalEntrevistas: dto.totalEntrevistas,
         duracionCuestionarioMin: dto.duracionCuestionarioMin,
@@ -95,26 +107,20 @@ export class CotizacionesService {
         realizamosCuestionario: dto.realizamosCuestionario,
         realizamosScript: dto.realizamosScript,
         clienteSolicitaReporte: dto.clienteSolicitaReporte,
+        clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
+        numeroOlasBi: dto.numeroOlasBi ?? 2,
       });
 
-
-
-
-      // ⬇️ Cuando queramos persistir los bloques (TRABAJO DE CAMPO,
-      // RECURSOS, etc.) haremos aquí un $transaction para:
-      // - crear CotizacionItem[] desde buildResult.items
-      // - actualizar totalCobrar, costoPorEntrevista, factores, etc.
-      //
-      // De momento solo lo ejecutamos para asegurarnos que calcula bien.
+      // TODO: Persistir buildResult.items en CotizacionItem y actualizar totales.
       void buildResult;
     }
 
-    // 4) Devolvemos la cotización con la info actual
+    // 5) Devolvemos la cotización con la info actual
     return this.findOne(cotizacion.id);
   }
 
   /**
-   * Devuelve una cotización con su proyecto, cliente y detalle de items.
+   * Devuelve una cotización con su proyecto, cliente, contacto y detalle.
    */
   async findOne(id: number) {
     const cot = await this.prisma.cotizacion.findUnique({
@@ -122,6 +128,7 @@ export class CotizacionesService {
       select: {
         id: true,
         code: true,
+        name: true,
         status: true,
         project: {
           select: {
@@ -137,6 +144,9 @@ export class CotizacionesService {
               },
             },
           },
+        },
+        contacto: {
+          select: { id: true, nombre: true, email: true, telefono: true },
         },
         createdBy: {
           select: { id: true, name: true, lastName: true },
@@ -179,11 +189,15 @@ export class CotizacionesService {
       select: {
         id: true,
         code: true,
+        name: true,
         status: true,
         totalEntrevistas: true,
         totalCobrar: true,
         costoPorEntrevista: true,
         createdAt: true,
+        contacto: {
+          select: { id: true, nombre: true, email: true },
+        },
         createdBy: {
           select: { id: true, name: true, lastName: true },
         },
@@ -201,10 +215,13 @@ export class CotizacionesService {
     });
     if (!current) throw new NotFoundException('Cotización no encontrada');
 
-    // Regla de negocio: no permitir cambios si está aprobada o rechazada
-    if (['aprobado', 'rechazado'].includes(current.status)) {
+    // No permitir cambios si está aprobada o no aprobada
+    if (
+      current.status === CotizacionStatus.APROBADO ||
+      current.status === CotizacionStatus.NO_APROBADO
+    ) {
       throw new BadRequestException(
-        'No se puede editar una cotización aprobada o rechazada',
+        'No se puede editar una cotización aprobada o no aprobada',
       );
     }
 
@@ -220,10 +237,7 @@ export class CotizacionesService {
       data: dto,
     });
 
-    // TODO:
-    // - Cuando implementemos el recálculo en update, aquí deberíamos
-    //   volver a llamar al builder correspondiente.
-    void updated;
+    void updated; // placeholder para cuando recalcules con builder
     return this.findOne(id);
   }
 
@@ -241,8 +255,6 @@ export class CotizacionesService {
     });
     if (!current) throw new NotFoundException('Cotización no encontrada');
 
-    // Aquí podrías validar roles específicos para aprobar/rechazar.
-    // Por ahora permitimos al creador cambiar el estado.
     if (current.createdById !== userId) {
       throw new ForbiddenException(
         'Solo el usuario que creó la cotización puede cambiar su estado',
@@ -255,6 +267,7 @@ export class CotizacionesService {
       select: {
         id: true,
         code: true,
+        name: true,
         status: true,
         updatedAt: true,
       },
@@ -263,7 +276,6 @@ export class CotizacionesService {
 
   /**
    * Clona una cotización (solo si está aprobada).
-   * Crea una nueva cotización con mismo contenido e items, pero status = draft.
    */
   async clone(id: number, userId: number) {
     const cot = await this.prisma.cotizacion.findUnique({
@@ -272,9 +284,9 @@ export class CotizacionesService {
     });
     if (!cot) throw new NotFoundException('Cotización no encontrada');
 
-    if (cot.status !== 'aprobado') {
+    if (cot.status !== CotizacionStatus.APROBADO) {
       throw new BadRequestException(
-        'Solo se pueden clonar cotizaciones en estado aprobado',
+        'Solo se pueden clonar cotizaciones en estado APROBADO',
       );
     }
 
@@ -284,8 +296,10 @@ export class CotizacionesService {
       const nueva = await tx.cotizacion.create({
         data: {
           projectId: cot.projectId,
+          contactoId: cot.contactoId,
+          name: `${cot.name} (copia)`,
           code,
-          status: 'draft',
+          status: CotizacionStatus.ENVIADO,
           createdById: userId, // quien la clona pasa a ser el creador
 
           totalEntrevistas: cot.totalEntrevistas,
@@ -307,7 +321,6 @@ export class CotizacionesService {
         },
       });
 
-      // Clona los items si existen
       if (cot.items.length > 0) {
         await tx.cotizacionItem.createMany({
           data: cot.items.map((it) => ({
@@ -348,8 +361,7 @@ export class CotizacionesService {
       );
     }
 
-    // Regla de negocio opcional: no borrar si está aprobada
-    if (cot.status === 'aprobado') {
+    if (cot.status === CotizacionStatus.APROBADO) {
       throw new BadRequestException(
         'No se puede eliminar una cotización aprobada',
       );
