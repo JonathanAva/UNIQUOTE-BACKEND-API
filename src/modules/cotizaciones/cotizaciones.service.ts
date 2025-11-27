@@ -94,7 +94,9 @@ export class CotizacionesService {
         encuestadoresTotales: dto.encuestadoresTotales,
         realizamosCuestionario: dto.realizamosCuestionario,
         realizamosScript: dto.realizamosScript,
+        clienteSolicitaReporte: dto.clienteSolicitaReporte,
       });
+
 
 
 
