@@ -1,143 +1,193 @@
-// src/modules/cotizaciones/dto/create-cotizacion.dto.ts
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+/**
+ * Enum de tipos de estudio disponibles en la empresa
+ */
+export enum StudyTypeEnum {
+  CUALITATIVO = 'Cualitativo',
+  CUANTITATIVO = 'Cuantitativo',
+}
+
+/**
+ * Enum de metodologías cualitativas soportadas
+ */
+export enum MetodologiaEnum {
+  CASA_POR_CASA = 'Casa por casa',
+  CENTRO_COMERCIAL = 'Centro comercial',
+  MYSTERY_SHOPPER = 'Mysteri shopper',
+  ONLINE = 'Online',
+  PUNTO_AFLUENCIA = 'Punto de afluencia',
+  TELEFONICO = 'Telefonico',
+}
+
+/**
+ * DTO para crear una cotización nueva dentro de un proyecto
+ */
 export class CreateCotizacionDto {
   @ApiProperty({
-    description: 'ID del proyecto al que pertenece la cotización',
     example: 1,
+    description: 'ID del proyecto asociado a la cotización',
   })
   @IsInt()
   projectId: number;
 
   @ApiProperty({
-    description: 'Nombre amigable de la cotización',
-    example: 'Ola 1 – Casa por casa noviembre',
-  })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiProperty({
-    description:
-      'ID del contacto de la empresa asociado a esta cotización (opcional)',
     example: 3,
     required: false,
+    description: 'ID del contacto dentro del cliente (opcional)',
   })
   @IsOptional()
   @IsInt()
   contactoId?: number;
 
   @ApiProperty({
-    description: 'Total de entrevistas del estudio',
-    example: 1050,
+    example: 'Cotización Pizza Hawaiana 2025',
+    description: 'Nombre de la cotización',
+  })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({
+    enum: StudyTypeEnum,
+    example: StudyTypeEnum.CUALITATIVO,
+    description: 'Tipo de estudio: Cualitativo o Cuantitativo',
+  })
+  @IsString()
+  @IsNotEmpty()
+  studyType: string;
+
+  @ApiProperty({
+    enum: MetodologiaEnum,
+    required: false,
+    example: MetodologiaEnum.CASA_POR_CASA,
+    description:
+      'Metodología usada en estudios cualitativos. Solo se usa si studyType = Cualitativo',
+  })
+  @IsOptional()
+  @IsString()
+  metodologia?: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'Indica si esta cotización incluye trabajo de campo (campo requerido)',
+  })
+  @IsBoolean()
+  trabajoDeCampo: boolean;
+
+  @ApiProperty({
+    example: 2,
+    required: false,
+    description:
+      'Número de olas BI para informe (opcional, por defecto 2 si aplica)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  numeroOlasBi?: number;
+
+  @ApiProperty({
+    example: 1000,
+    description: 'Número total de entrevistas o encuestas previstas',
   })
   @IsInt()
   @Min(1)
   totalEntrevistas: number;
 
   @ApiProperty({
-    description: 'Duración del cuestionario en minutos',
-    example: 15,
+    example: 10,
+    description: 'Duración estimada del cuestionario en minutos',
   })
   @IsInt()
   @Min(1)
   duracionCuestionarioMin: number;
 
   @ApiProperty({
-    description: 'Tipo de entrevista',
     example: 'Casa por casa',
+    description: 'Tipo de entrevista realizada',
   })
   @IsString()
-  @IsNotEmpty()
   tipoEntrevista: string;
 
   @ApiProperty({
-    description: 'Penetración de la categoría',
-    example: 'facil',
-    enum: ['facil', 'medio', 'dificil'],
+    example: 100,
+    description: 'Penetración de la categoría en porcentaje',
   })
-  @IsString()
-  @IsNotEmpty()
-  penetracionCategoria: string;
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  penetracionCategoria: number;
 
   @ApiProperty({
-    description: 'Cobertura seleccionada (Nacional, Urbano, AMSS, etc.)',
     example: 'Nacional',
+    description: 'Cobertura del estudio: Nacional, Regional, etc.',
   })
   @IsString()
-  @IsNotEmpty()
   cobertura: string;
 
   @ApiProperty({
-    description: 'Cantidad de supervisores',
     example: 8,
+    description: 'Número total de supervisores asignados',
   })
   @IsInt()
-  @Min(0)
   supervisores: number;
 
   @ApiProperty({
-    description: 'Cantidad total de encuestadores',
     example: 30,
+    description: 'Número total de encuestadores requeridos',
   })
   @IsInt()
-  @Min(0)
   encuestadoresTotales: number;
 
   @ApiProperty({
-    description: '¿UNIMER realiza el cuestionario?',
     example: true,
+    description: 'Indica si realizamos el cuestionario como empresa',
   })
   @IsBoolean()
   realizamosCuestionario: boolean;
 
   @ApiProperty({
-    description: '¿UNIMER realiza el script?',
-    example: false,
+    example: true,
+    description: 'Indica si realizamos el script para entrevistas',
   })
   @IsBoolean()
   realizamosScript: boolean;
 
   @ApiProperty({
-    description: '¿Cliente solicita reporte?',
     example: true,
+    description: 'Indica si el cliente solicita reporte de resultados',
   })
   @IsBoolean()
   clienteSolicitaReporte: boolean;
 
   @ApiProperty({
-    description: '¿Cliente solicita informe BI?',
     example: true,
+    description: 'Indica si el cliente solicita un informe BI',
   })
   @IsBoolean()
   clienteSolicitaInformeBI: boolean;
 
   @ApiProperty({
-    description:
-      'Número de olas para BI (base 2, si es 3 significa una ola extra)',
-    example: 2,
+    example: 500,
     required: false,
+    description:
+      'Incentivo económico ofrecido al participante por cada entrevista (opcional)',
   })
   @IsOptional()
   @IsInt()
-  @Min(2)
-  numeroOlasBi?: number;
-
-  @ApiProperty({
-    description: 'Monto total de incentivos (opcional)',
-    example: 1000,
-    required: false,
-  })
-  @IsOptional()
-  @IsNumber()
+  @Min(0)
   incentivoTotal?: number;
 }

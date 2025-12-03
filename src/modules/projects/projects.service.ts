@@ -1,4 +1,5 @@
-// src/modules/cotizaciones/projects/projects.service.ts
+// src/modules/projects/projects.service.ts
+
 import {
   Injectable,
   NotFoundException,
@@ -14,46 +15,38 @@ export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Crea un proyecto asociado a un cliente (y contacto opcional).
-   * createdById se toma del usuario autenticado.
+   * Crear proyecto
    */
   async create(dto: CreateProjectDto, createdById: number) {
-    // Verifica que exista el cliente
+    // Validar cliente
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: dto.clienteId },
       select: { id: true },
     });
-    if (!cliente) {
-      throw new NotFoundException('Cliente no encontrado');
-    }
+    if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    // Si se envía contactoId, valida que pertenezca a ese cliente
+    // Validar contacto (si viene)
     if (dto.contactoId) {
       const contacto = await this.prisma.contactoEmpresa.findFirst({
         where: { id: dto.contactoId, clienteId: dto.clienteId },
         select: { id: true },
       });
-      if (!contacto) {
+      if (!contacto)
         throw new NotFoundException(
           'El contacto no pertenece al cliente especificado',
         );
-      }
     }
 
     return this.prisma.project.create({
       data: {
         clienteId: dto.clienteId,
-        contactoId: dto.contactoId,
+        contactoId: dto.contactoId ?? null,
         name: dto.name,
-        projectType: dto.projectType,
-        studyType: dto.studyType,
         createdById,
       },
       select: {
         id: true,
         name: true,
-        projectType: true,
-        studyType: true,
         cliente: {
           select: { id: true, empresa: true, razonSocial: true },
         },
@@ -69,8 +62,7 @@ export class ProjectsService {
   }
 
   /**
-   * Lista proyectos por cliente.
-   * Ej: para Pizza Hut, ver todos los proyectos y cantidad de cotizaciones.
+   * Listar proyectos de un cliente
    */
   async findAllByCliente(clienteId: number) {
     return this.prisma.project.findMany({
@@ -79,8 +71,6 @@ export class ProjectsService {
       select: {
         id: true,
         name: true,
-        projectType: true,
-        studyType: true,
         cliente: {
           select: { id: true, empresa: true, razonSocial: true },
         },
@@ -100,8 +90,7 @@ export class ProjectsService {
   }
 
   /**
-   * Detalle de un proyecto con sus cotizaciones incluidas.
-   * Útil para la “biblioteca” de cotizaciones por proyecto.
+   * Obtener proyecto con sus cotizaciones
    */
   async findOneWithCotizaciones(id: number) {
     const project = await this.prisma.project.findUnique({
@@ -109,8 +98,6 @@ export class ProjectsService {
       select: {
         id: true,
         name: true,
-        projectType: true,
-        studyType: true,
         cliente: {
           select: { id: true, empresa: true, razonSocial: true },
         },
@@ -122,6 +109,7 @@ export class ProjectsService {
         },
         createdAt: true,
         updatedAt: true,
+
         cotizaciones: {
           orderBy: { createdAt: 'desc' },
           select: {
@@ -144,13 +132,14 @@ export class ProjectsService {
       },
     });
 
-    if (!project) {
-      throw new NotFoundException('Proyecto no encontrado');
-    }
+    if (!project) throw new NotFoundException('Proyecto no encontrado');
 
     return project;
   }
 
+  /**
+   * Actualizar proyecto
+   */
   async update(id: number, dto: UpdateProjectDto, userId: number) {
     const project = await this.prisma.project.findUnique({
       where: { id },
@@ -158,18 +147,16 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('Proyecto no encontrado');
 
-    // Regla de negocio opcional: solo quien lo creó puede editar
     if (project.createdById !== userId) {
       throw new ForbiddenException(
         'Solo el usuario que creó el proyecto puede editarlo',
       );
     }
 
-    // Valida cliente/contacto si se envían cambios
+    // Validación de cliente y contacto si cambian
     if (dto.clienteId && dto.clienteId !== project.clienteId) {
       const cliente = await this.prisma.cliente.findUnique({
         where: { id: dto.clienteId },
-        select: { id: true },
       });
       if (!cliente) throw new NotFoundException('Cliente no encontrado');
     }
@@ -180,28 +167,31 @@ export class ProjectsService {
           id: dto.contactoId,
           clienteId: dto.clienteId ?? project.clienteId,
         },
-        select: { id: true },
       });
-      if (!contacto) {
+      if (!contacto)
         throw new NotFoundException(
           'El contacto no pertenece al cliente especificado',
         );
-      }
     }
 
     return this.prisma.project.update({
       where: { id },
-      data: dto,
+      data: {
+        clienteId: dto.clienteId ?? project.clienteId,
+        contactoId: dto.contactoId ?? null,
+        name: dto.name ?? undefined,
+      },
       select: {
         id: true,
         name: true,
-        projectType: true,
-        studyType: true,
         updatedAt: true,
       },
     });
   }
 
+  /**
+   * Eliminar proyecto
+   */
   async remove(id: number, userId: number) {
     const project = await this.prisma.project.findUnique({
       where: { id },

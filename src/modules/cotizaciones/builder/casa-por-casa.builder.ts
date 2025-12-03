@@ -91,7 +91,7 @@ export interface BuildCotizacionCasaPorCasaInput {
   totalEntrevistas: number;
   duracionCuestionarioMin: number;
   tipoEntrevista: string;
-  penetracionCategoria: string;
+  penetracionCategoria: number;
   cobertura: string;
   supervisores: number;
   encuestadoresTotales: number;
@@ -101,6 +101,8 @@ export interface BuildCotizacionCasaPorCasaInput {
   clienteSolicitaReporte?: boolean;
   clienteSolicitaInformeBI?: boolean;
   numeroOlasBi?: number; // base 2
+  trabajoDeCampo: boolean;
+
 }
 
 // ---------------------------------------------------------

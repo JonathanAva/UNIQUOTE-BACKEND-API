@@ -147,8 +147,6 @@ model Project {
   contacto   ContactoEmpresa? @relation(fields: [contactoId], references: [id])
 
   name        String
-  projectType String
-  studyType   String
 
   createdById Int
   createdBy   User @relation(fields: [createdById], references: [id])
@@ -159,67 +157,57 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([clienteId])
-  @@index([projectType])
 }
+
 
 // =====================================================
 // MODELO: Cotizacion
 // =====================================================
 model Cotizacion {
-  id Int @id @default(autoincrement())
+  id                      Int      @id @default(autoincrement())
+  name                    String
+  code                    String   @unique
+  status                  CotizacionStatus @default(ENVIADO)
 
-  projectId Int
-  project   Project @relation(fields: [projectId], references: [id])
+  // Nuevos campos
+  studyType               String
+  metodologia             String? // opcional
+  trabajoDeCampo          Boolean
+  numeroOlasBi            Int?
 
-  // Contacto específico de ese cliente para esta cotización (opcional)
-  contactoId Int?
-  contacto   ContactoEmpresa? @relation(fields: [contactoId], references: [id])
-
-  // Nombre amigable de la cotización
-  name String
-
-  // Código interno legible (ej. "COT-<projectId>-<secuencia>")
-  code String
-
-  status CotizacionStatus @default(ENVIADO)
-
-  createdById Int
-  createdBy   User @relation(fields: [createdById], references: [id])
-
-  // ----------------------------
-  // Inputs principales de negocio
-  // ----------------------------
-  totalEntrevistas         Int
-  duracionCuestionarioMin  Int
-  tipoEntrevista           String
-  penetracionCategoria     String
-  cobertura                String
-  supervisores             Int
-  encuestadoresTotales     Int
-  realizamosCuestionario   Boolean
-  realizamosScript         Boolean
-  clienteSolicitaReporte   Boolean
+  // Ya existentes
+  totalEntrevistas        Int
+  duracionCuestionarioMin Int
+  tipoEntrevista          String
+  penetracionCategoria    Int
+  cobertura               String
+  supervisores            Int
+  encuestadoresTotales    Int
+  realizamosCuestionario  Boolean
+  realizamosScript        Boolean
+  clienteSolicitaReporte  Boolean
   clienteSolicitaInformeBI Boolean
-  incentivoTotal           Decimal? @db.Decimal(12, 2)
+  incentivoTotal          Int?
 
-  // ----------------------------
-  // Totales / resultados globales
-  // ----------------------------
-  factorComisionablePct   Decimal? @db.Decimal(5, 2)
-  factorNoComisionablePct Decimal? @db.Decimal(5, 2)
-  totalCobrar             Decimal? @db.Decimal(14, 2)
-  costoPorEntrevista      Decimal? @db.Decimal(14, 4)
+  factorComisionablePct   Float?
+  factorNoComisionablePct Float?
+  totalCobrar             Float?
+  costoPorEntrevista      Float?
 
-  items CotizacionItem[]
+  // Relaciones
+  project                 Project   @relation(fields: [projectId], references: [id])
+  projectId               Int
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  contacto                ContactoEmpresa? @relation(fields: [contactoId], references: [id])
+  contactoId              Int?
 
-  @@index([projectId])
-  @@index([status])
-  @@index([contactoId])
-  // índice combinado útil para stats por cliente + contacto
-  @@index([projectId, contactoId])
+  createdBy               User     @relation(fields: [createdById], references: [id])
+  createdById             Int
+
+  items                   CotizacionItem[]
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 // =====================================================
