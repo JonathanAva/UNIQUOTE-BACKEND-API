@@ -57,6 +57,13 @@ export class ProjectsController {
     return this.projectsService.findAllByCliente(clienteId);
   }
 
+  @Get('all')
+  @ApiOperation({ summary: 'Listar todos los proyectos' })
+  findAll() {
+    return this.projectsService.findAll();
+  }
+
+
   @Get(':id')
   @ApiOperation({
     summary: 'Obtener detalle de proyecto + lista de cotizaciones',

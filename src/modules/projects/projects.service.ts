@@ -89,6 +89,31 @@ export class ProjectsService {
     });
   }
 
+  async findAll() {
+  return this.prisma.project.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      cliente: {
+        select: { id: true, empresa: true, razonSocial: true },
+      },
+      contacto: {
+        select: { id: true, nombre: true, email: true },
+      },
+      createdBy: {
+        select: { id: true, name: true, lastName: true },
+      },
+      createdAt: true,
+      updatedAt: true,
+      _count: {
+        select: { cotizaciones: true },
+      },
+    },
+  });
+}
+
+
   /**
    * Obtener proyecto con sus cotizaciones
    */
