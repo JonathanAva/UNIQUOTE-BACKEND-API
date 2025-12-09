@@ -181,7 +181,7 @@ export class CreateCotizacionDto {
   clienteSolicitaInformeBI: boolean;
 
   @ApiProperty({
-    example: 500,
+    example: 0,
     required: false,
     description:
       'Incentivo económico ofrecido al participante por cada entrevista (opcional)',

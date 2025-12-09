@@ -11,7 +11,7 @@ import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { CotizacionStatus } from '@prisma/client';
-
+import { buildDistribucionNacional } from './builder/casa-por-casa.builder';
 import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder';
 
 @Injectable()
@@ -382,11 +382,62 @@ const nueva = await tx.cotizacion.create({
       );
     }
 
-    if (cot.status === CotizacionStatus.APROBADO) {
-      throw new BadRequestException('No se puede eliminar una cotización aprobada');
+    if (cot.status !== CotizacionStatus.NO_APROBADO) {
+      throw new BadRequestException(
+        'Solo se pueden eliminar cotizaciones rechazadas'
+      );
     }
 
     await this.prisma.cotizacion.delete({ where: { id } });
     return { deleted: true };
   }
+
+  // ------------------------------------------------------
+// DISTRIBUCIÓN NACIONAL (para tabla por departamento)
+// ------------------------------------------------------
+async getDistribucionNacional(cotizacionId: number) {
+  const cot = await this.prisma.cotizacion.findUnique({
+    where: { id: cotizacionId },
+    select: {
+      id: true,
+      studyType: true,
+      trabajoDeCampo: true,
+      totalEntrevistas: true,
+      duracionCuestionarioMin: true,
+      tipoEntrevista: true,
+      penetracionCategoria: true,
+      cobertura: true,
+      supervisores: true,
+      encuestadoresTotales: true,
+      realizamosCuestionario: true,
+      realizamosScript: true,
+      clienteSolicitaReporte: true,
+      clienteSolicitaInformeBI: true,
+      numeroOlasBi: true,
+    },
+  });
+
+  if (!cot) throw new NotFoundException('Cotización no encontrada');
+
+  const result = buildDistribucionNacional({
+    totalEntrevistas: cot.totalEntrevistas,
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    tipoEntrevista: cot.tipoEntrevista,
+    penetracionCategoria: cot.penetracionCategoria,
+    cobertura: cot.cobertura,
+    supervisores: cot.supervisores,
+    encuestadoresTotales: cot.encuestadoresTotales,
+    realizamosCuestionario: cot.realizamosCuestionario,
+    realizamosScript: cot.realizamosScript,
+    clienteSolicitaReporte: cot.clienteSolicitaReporte,
+    clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
+    numeroOlasBi: cot.numeroOlasBi ?? 2,
+    trabajoDeCampo: cot.trabajoDeCampo,
+  });
+
+  return result;
 }
+
+
+}
+

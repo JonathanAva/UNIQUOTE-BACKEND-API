@@ -1225,4 +1225,89 @@ export function buildCotizacionCasaPorCasa(
   };
 
   return buildCasaPorCasaNacional(builderParams);
+
+  
+
 }
+
+/**
+ * Devuelve solo la distribución nacional (por departamento)
+ * sin generar la cotización completa.
+ *
+ * Útil para endpoints de depuración o para mostrar la tabla intermedia.
+ */
+export function buildDistribucionNacional(
+  input: BuildCotizacionCasaPorCasaInput,
+): DistribucionNacionalResult {
+  const coberturaLower = input.cobertura.trim().toLowerCase();
+  if (coberturaLower !== 'nacional') {
+    throw new Error(
+      `buildDistribucionNacional solo soporta cobertura "Nacional" (recibido: "${input.cobertura}")`,
+    );
+  }
+
+  // Mapear penetración
+  const rawPen = (input.penetracionCategoria ?? '').toString();
+  const value = rawPen.trim().toLowerCase();
+  const numeric = Number(value.replace('%', ''));
+  let penetracion: number;
+
+  if (!Number.isNaN(numeric) && numeric > 0) {
+    penetracion = numeric > 1 ? numeric / 100 : numeric;
+  } else {
+    switch (value) {
+      case 'facil':
+      case 'fácil':
+        penetracion = 0.85;
+        break;
+      case 'medio':
+        penetracion = 0.6;
+        break;
+      case 'dificil':
+      case 'difícil':
+        penetracion = 0.35;
+        break;
+      default:
+        throw new Error(
+          `penetracionCategoria inválida: "${rawPen}", envía porcentaje (ej. "80%" o "0.8") o etiquetas facil/medio/dificil`,
+        );
+    }
+  }
+
+  // Paso a paso del motor de distribución nacional
+  let distribucion = distribuirEntrevistasNacional(
+    input.totalEntrevistas,
+    input.tipoEntrevista,
+  );
+
+  distribucion = aplicarRendimientoNacional(distribucion, {
+    duracionCuestionarioMin: input.duracionCuestionarioMin,
+    penetracion,
+    totalEncuestadores: input.encuestadoresTotales,
+    segmentSize: 20,
+    filterMinutes: 2,
+    searchMinutes: 8,
+    desplazamientoMin: 60,
+    groupSize: 4,
+  });
+
+  distribucion = aplicarEncuestadoresYSupervisoresNacional(
+    distribucion,
+    input.encuestadoresTotales,
+    { groupSize: 4, supervisorSplit: 4 },
+  );
+
+  distribucion = aplicarDiasCampoYCostosNacional(distribucion);
+
+  distribucion = aplicarPrecioBoletaNacional(distribucion, {
+    duracionCuestionarioMin: input.duracionCuestionarioMin,
+    penetracion,
+  });
+
+  distribucion = calcularTotalesViaticosTransporteHotelNacional(distribucion);
+
+  distribucion = calcularPagosPersonalNacional(distribucion);
+
+  return distribucion;
+}
+

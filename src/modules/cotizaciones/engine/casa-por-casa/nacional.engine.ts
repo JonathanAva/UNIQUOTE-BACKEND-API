@@ -637,8 +637,9 @@ export function aplicarDiasCampoYCostosNacional(
   return {
     ...distribucion,
     filas,
-    totalDiasCampoEncuestGlobal: totalDiasCampo,
+    totalDiasCampoEncuestGlobal: Math.ceil(totalDiasCampo),
   };
+
 }
 
 // ---------------------------------------------------------------------------
@@ -742,39 +743,47 @@ export function aplicarPrecioBoletaNacional(
  * (AB3, AB4, AB5, AB6, AB25) o se podrían parametrizar si cambia
  * por proyecto.
  */
+/**
+ * Calcula los totales por departamento y globales para:
+ *
+ *  - Total viáticos      = (encuestadores + supervisores) * días * viáticosUnit
+ *  - Total T. Microbus   = viajesPorDia * tMicrobusUnit * días
+ *  - Total hotel         = (encuestadores + supervisores) * días * hotelUnit
+ */
 export function calcularTotalesViaticosTransporteHotelNacional(
   distribucion: DistribucionNacionalResult,
 ): DistribucionNacionalResult {
-  // En tu Excel, estos vienen de la hoja de botones.
-  // Aquí los dejamos como constantes, pero se pueden parametrizar.
-  const AB3 = 12; // capacidad microbus (personas) → ejemplo
-  const AB4 = 0; // posible base/extra fijo
-  const AB5 = 0; // posible base/extra fijo
-  const AB6 = 1; // factor de viajes (se multiplica con tMicrobusUnit)
-  const AB25 = 1; // factor para hotel (se multiplica con hotelUnit)
-
   let totalViaticosGlobal = 0;
   let totalTMicrobusGlobal = 0;
   let totalHotelGlobal = 0;
 
-  const filas = distribucion.filas.map((fila) => {
-    const totalPersonas = (fila.encuestadores ?? 0) + (fila.supervisores ?? 0);
-    const diasCampo = fila.diasCampoEncuest ?? 0;
+  const GRUPOS_POR_DEPTO = 2; // AB6
+  const ENCUENTADORES_POR_GRUPO = 8; // AB4
+  const SUPERVISORES_POR_GRUPO = 2; // AB5
+  const CAPACIDAD_MICROBUS = 12; // AB3
+  const FACTOR_HOTEL = 1; // AB25
 
+  const filas = distribucion.filas.map((fila) => {
+    const encuestadores = fila.encuestadores ?? 0;
+    const supervisores = fila.supervisores ?? 0;
+    const totalPersonas = encuestadores + supervisores;
+
+    const diasCampo = fila.diasCampoEncuest ?? 0;
     const viaticosUnit = fila.viaticosUnit ?? 0;
     const tMicrobusUnit = fila.tMicrobusUnit ?? 0;
     const hotelUnit = fila.hotelUnit ?? 0;
 
-    // Total viáticos = (U14 + V14) * W14 * Y14
+    // === Viáticos ===
     const totalViaticos = totalPersonas * diasCampo * viaticosUnit;
 
-    // Total T. Microbus = AA14 * (AB6 * CEILING((AB4 + AB5)/AB3, 1)) * W14
-    const viajesNecesarios = Math.ceil((AB4 + AB5) / AB3) || 1;
-    const totalTMicrobus =
-      totalPersonas * AB6 * viajesNecesarios * diasCampo * tMicrobusUnit;
+    // === Transporte (microbuses) usando fórmula corregida ===
+    const personasPorGrupo = ENCUENTADORES_POR_GRUPO + SUPERVISORES_POR_GRUPO;
+    const microbusesPorGrupo = Math.ceil(personasPorGrupo / CAPACIDAD_MICROBUS);
+    const totalMicrobusesPorDia = GRUPOS_POR_DEPTO * microbusesPorGrupo;
+    const totalTMicrobus = tMicrobusUnit * totalMicrobusesPorDia * diasCampo;
 
-    // Total hotel = (U25 + V25) * W25 * AB25
-    const totalHotel = totalPersonas * diasCampo * AB25 * hotelUnit;
+    // === Hotel ===
+    const totalHotel = totalPersonas * diasCampo * FACTOR_HOTEL * hotelUnit;
 
     totalViaticosGlobal += totalViaticos;
     totalTMicrobusGlobal += totalTMicrobus;
@@ -796,6 +805,8 @@ export function calcularTotalesViaticosTransporteHotelNacional(
     totalHotelGlobal,
   };
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Pagos de personal: encuestadores y supervisores

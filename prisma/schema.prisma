@@ -18,7 +18,7 @@ datasource db {
 // =====================================================
 
 /// Estados de la cotización para manejar el flujo comercial
-/// En el frontend puedes mapearlos a textos bonitos:
+/// Puedes mapearlos en frontend:
 /// ENVIADO → "Enviado", NEGOCIACION → "Negociación", etc.
 enum CotizacionStatus {
   ENVIADO
@@ -147,7 +147,6 @@ model Project {
   contacto   ContactoEmpresa? @relation(fields: [contactoId], references: [id])
 
   name        String
-
   createdById Int
   createdBy   User @relation(fields: [createdById], references: [id])
 
@@ -159,23 +158,22 @@ model Project {
   @@index([clienteId])
 }
 
-
 // =====================================================
 // MODELO: Cotizacion
 // =====================================================
 model Cotizacion {
-  id                      Int      @id @default(autoincrement())
+  id                      Int              @id @default(autoincrement())
   name                    String
-  code                    String   @unique
+  code                    String           @unique
   status                  CotizacionStatus @default(ENVIADO)
 
-  // Nuevos campos
+  // Campos del estudio
   studyType               String
-  metodologia             String? // opcional
+  metodologia             String?
   trabajoDeCampo          Boolean
   numeroOlasBi            Int?
 
-  // Ya existentes
+  // Datos técnicos
   totalEntrevistas        Int
   duracionCuestionarioMin Int
   tipoEntrevista          String
@@ -189,34 +187,37 @@ model Cotizacion {
   clienteSolicitaInformeBI Boolean
   incentivoTotal          Int?
 
+  // Totales
   factorComisionablePct   Float?
   factorNoComisionablePct Float?
   totalCobrar             Float?
   costoPorEntrevista      Float?
 
   // Relaciones
-  project                 Project   @relation(fields: [projectId], references: [id])
-  projectId               Int
+  project     Project   @relation(fields: [projectId], references: [id])
+  projectId   Int
 
-  contacto                ContactoEmpresa? @relation(fields: [contactoId], references: [id])
-  contactoId              Int?
+  contacto    ContactoEmpresa? @relation(fields: [contactoId], references: [id])
+  contactoId  Int?
 
-  createdBy               User     @relation(fields: [createdById], references: [id])
-  createdById             Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById Int
 
-  items                   CotizacionItem[]
+  items       CotizacionItem[]
 
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // =====================================================
 // MODELO: CotizacionItem
 // =====================================================
+// Relacionado con Cotización, se eliminarán automáticamente
+// cuando se borre la cotización (onDelete: Cascade)
 model CotizacionItem {
   id           Int        @id @default(autoincrement())
   cotizacionId Int
-  cotizacion   Cotizacion @relation(fields: [cotizacionId], references: [id])
+  cotizacion   Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
 
   category         String
   description      String
