@@ -4,7 +4,6 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
-  IsPositive,
   IsString,
   Max,
   Min,
@@ -45,26 +44,16 @@ export enum TrabajoDeCampoTipo {
  * DTO para crear una cotización nueva dentro de un proyecto
  */
 export class CreateCotizacionDto {
-  @ApiProperty({
-    example: 1,
-    description: 'ID del proyecto asociado a la cotización',
-  })
+  @ApiProperty({ example: 1, description: 'ID del proyecto asociado a la cotización' })
   @IsInt()
   projectId: number;
 
-  @ApiProperty({
-    example: 3,
-    required: false,
-    description: 'ID del contacto dentro del cliente (opcional)',
-  })
+  @ApiProperty({ example: 3, required: false, description: 'ID del contacto dentro del cliente (opcional)' })
   @IsOptional()
   @IsInt()
   contactoId?: number;
 
-  @ApiProperty({
-    example: 'Cotización Pizza Hawaiana 2025',
-    description: 'Nombre de la cotización',
-  })
+  @ApiProperty({ example: 'Cotización Pizza Hawaiana 2025', description: 'Nombre de la cotización' })
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -82,46 +71,44 @@ export class CreateCotizacionDto {
     enum: MetodologiaEnum,
     required: false,
     example: MetodologiaEnum.CASA_POR_CASA,
-    description:
-      'Metodología usada en estudios cualitativos. Solo se usa si studyType = Cualitativo',
+    description: 'Metodología usada si el estudio es cualitativo',
   })
   @IsOptional()
   @IsString()
   metodologia?: string;
 
+  // 🔽 Trabajo de campo
   @ApiProperty({
     example: true,
     description: '¿Se realizará trabajo de campo?',
   })
   @IsBoolean()
-  realizaraTrabajoDeCampo: boolean;
+  trabajoDeCampoRealiza: boolean;
 
   @ApiProperty({
-    example: 'propio',
+    example: TrabajoDeCampoTipo.PROPIO,
     enum: TrabajoDeCampoTipo,
     required: false,
-    description: 'Tipo de trabajo de campo: propio o subcontratado',
+    description: 'Tipo de trabajo de campo: "propio" o "subcontratado"',
   })
-  @ValidateIf((o) => o.realizaraTrabajoDeCampo === true)
+  @ValidateIf((o) => o.trabajoDeCampoRealiza === true)
   @IsEnum(TrabajoDeCampoTipo)
   trabajoDeCampoTipo?: TrabajoDeCampoTipo;
 
   @ApiProperty({
     example: 3000,
     required: false,
-    description:
-      'Costo total del trabajo de campo si es subcontratado (requerido solo si aplica)',
+    description: 'Costo total del trabajo de campo (solo si es subcontratado)',
   })
   @ValidateIf((o) => o.trabajoDeCampoTipo === TrabajoDeCampoTipo.SUBCONTRATADO)
   @IsNumber()
   @Min(1)
-  costoTrabajoDeCampo?: number;
+  trabajoDeCampoCosto?: number;
 
   @ApiProperty({
     example: 2,
     required: false,
-    description:
-      'Número de olas BI para informe (opcional, por defecto 2 si aplica)',
+    description: 'Número de olas BI para informe (opcional, por defecto 2)',
   })
   @IsOptional()
   @IsInt()
@@ -129,92 +116,58 @@ export class CreateCotizacionDto {
   @Max(10)
   numeroOlasBi?: number;
 
-  @ApiProperty({
-    example: 1000,
-    description: 'Número total de entrevistas o encuestas previstas',
-  })
+  @ApiProperty({ example: 1000, description: 'Número total de entrevistas o encuestas' })
   @IsInt()
   @Min(1)
   totalEntrevistas: number;
 
-  @ApiProperty({
-    example: 10,
-    description: 'Duración estimada del cuestionario en minutos',
-  })
+  @ApiProperty({ example: 10, description: 'Duración del cuestionario en minutos' })
   @IsInt()
   @Min(1)
   duracionCuestionarioMin: number;
 
-  @ApiProperty({
-    example: 'Casa por casa',
-    description: 'Tipo de entrevista realizada',
-  })
+  @ApiProperty({ example: 'Casa por casa', description: 'Tipo de entrevista realizada' })
   @IsString()
   tipoEntrevista: string;
 
-  @ApiProperty({
-    example: 100,
-    description: 'Penetración de la categoría en porcentaje',
-  })
+  @ApiProperty({ example: 100, description: 'Penetración de la categoría en porcentaje' })
   @IsInt()
   @Min(1)
   @Max(100)
   penetracionCategoria: number;
 
-  @ApiProperty({
-    example: 'Nacional',
-    description: 'Cobertura del estudio: Nacional, Regional, etc.',
-  })
+  @ApiProperty({ example: 'Nacional', description: 'Cobertura del estudio' })
   @IsString()
   cobertura: string;
 
-  @ApiProperty({
-    example: 8,
-    description: 'Número total de supervisores asignados',
-  })
+  @ApiProperty({ example: 8, description: 'Número total de supervisores asignados' })
   @IsInt()
   supervisores: number;
 
-  @ApiProperty({
-    example: 30,
-    description: 'Número total de encuestadores requeridos',
-  })
+  @ApiProperty({ example: 30, description: 'Número total de encuestadores requeridos' })
   @IsInt()
   encuestadoresTotales: number;
 
-  @ApiProperty({
-    example: true,
-    description: 'Indica si realizamos el cuestionario como empresa',
-  })
+  @ApiProperty({ example: true, description: '¿La empresa realiza el cuestionario?' })
   @IsBoolean()
   realizamosCuestionario: boolean;
 
-  @ApiProperty({
-    example: true,
-    description: 'Indica si realizamos el script para entrevistas',
-  })
+  @ApiProperty({ example: true, description: '¿La empresa realiza el script?' })
   @IsBoolean()
   realizamosScript: boolean;
 
-  @ApiProperty({
-    example: true,
-    description: 'Indica si el cliente solicita reporte de resultados',
-  })
+  @ApiProperty({ example: true, description: '¿El cliente solicita reporte de resultados?' })
   @IsBoolean()
   clienteSolicitaReporte: boolean;
 
-  @ApiProperty({
-    example: true,
-    description: 'Indica si el cliente solicita un informe BI',
-  })
+  @ApiProperty({ example: true, description: '¿El cliente solicita un informe BI?' })
   @IsBoolean()
   clienteSolicitaInformeBI: boolean;
 
   @ApiProperty({
     example: 0,
     required: false,
-    description:
-      'Incentivo económico ofrecido al participante por cada entrevista (opcional)',
+    description: 'Incentivo económico por entrevista (opcional)',
   })
   @IsOptional()
   @IsInt()

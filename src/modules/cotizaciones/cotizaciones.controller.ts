@@ -108,13 +108,13 @@ export class CotizacionesController {
     return this.service.remove(id, user.id);
   }
 
-  @Get(':id/distribucion-nacional')
-  @ApiOperation({
-    summary: 'Obtener tabla de distribución nacional por departamento',
-  })
-  getDistribucionNacional(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getDistribucionNacional(id);
-  }
+    @Get(':id/distribucion-nacional')
+    @ApiOperation({
+      summary: 'Obtener tabla de distribución nacional por departamento',
+    })
+    getDistribucionNacional(@Param('id', ParseIntPipe) id: number) {
+      return this.service.getDistribucionNacional(id);
+    }
 
 
 }

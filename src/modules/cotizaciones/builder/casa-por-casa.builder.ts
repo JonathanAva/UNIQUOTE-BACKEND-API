@@ -95,15 +95,17 @@ export interface BuildCotizacionCasaPorCasaInput {
   cobertura: string;
   supervisores: number;
   encuestadoresTotales: number;
+  realizamosCuestionario: boolean;
+  realizamosScript: boolean;
+  clienteSolicitaReporte: boolean;
+  clienteSolicitaInformeBI: boolean;
+  numeroOlasBi?: number;
 
-  realizamosCuestionario?: boolean;
-  realizamosScript?: boolean;
-  clienteSolicitaReporte?: boolean;
-  clienteSolicitaInformeBI?: boolean;
-  numeroOlasBi?: number; // base 2
-  trabajoDeCampo: boolean;
-
+  trabajoDeCampoRealiza: boolean;
+  trabajoDeCampoTipo?: 'propio' | 'subcontratado';
+  trabajoDeCampoCosto?: number;
 }
+
 
 // ---------------------------------------------------------
 // Helpers genéricos
@@ -1133,6 +1135,22 @@ export function buildCotizacionCasaPorCasa(
     );
   }
 
+  // Validación de trabajo de campo
+  const trabajoDeCampo = input.trabajoDeCampoRealiza ?? false;
+  const tipoTrabajoCampo = input.trabajoDeCampoTipo;
+  const costoTrabajoSubcontratado = input.trabajoDeCampoCosto;
+
+  // Validar que si es subcontratado, haya monto válido
+  if (
+    trabajoDeCampo &&
+    tipoTrabajoCampo === 'subcontratado' &&
+    (typeof costoTrabajoSubcontratado !== 'number' || costoTrabajoSubcontratado <= 0)
+  ) {
+    throw new Error(
+      `Debe proporcionar un monto válido para el trabajo de campo subcontratado.`,
+    );
+  }
+
   // Mapear penetración a fracción
   const rawPen = (input.penetracionCategoria ?? '').toString();
   const value = rawPen.trim().toLowerCase();
@@ -1161,14 +1179,13 @@ export function buildCotizacionCasaPorCasa(
     }
   }
 
-  // 1) Distribución base
+  // Paso 1: distribución y cálculos previos
   let distribucion = distribuirEntrevistasNacional(
     input.totalEntrevistas,
     input.tipoEntrevista,
   );
 
-  // 2) Rendimiento
-  const paramsRendimiento: ParamsRendimiento = {
+  distribucion = aplicarRendimientoNacional(distribucion, {
     duracionCuestionarioMin: input.duracionCuestionarioMin,
     penetracion,
     totalEncuestadores: input.encuestadoresTotales,
@@ -1177,34 +1194,26 @@ export function buildCotizacionCasaPorCasa(
     searchMinutes: 8,
     desplazamientoMin: 60,
     groupSize: 4,
-  };
+  });
 
-  distribucion = aplicarRendimientoNacional(distribucion, paramsRendimiento);
-
-  // 3) Encuestadores / supervisores
   distribucion = aplicarEncuestadoresYSupervisoresNacional(
     distribucion,
     input.encuestadoresTotales,
     { groupSize: 4, supervisorSplit: 4 },
   );
 
-  // 4) Días campo + costos unitarios
   distribucion = aplicarDiasCampoYCostosNacional(distribucion);
 
-  // 5) Precio de boleta
   distribucion = aplicarPrecioBoletaNacional(distribucion, {
     duracionCuestionarioMin: input.duracionCuestionarioMin,
     penetracion,
   });
 
-  // 6) Viáticos / transporte / hotel
-  distribucion =
-    calcularTotalesViaticosTransporteHotelNacional(distribucion);
+  distribucion = calcularTotalesViaticosTransporteHotelNacional(distribucion);
 
-  // 7) Pagos personal
   distribucion = calcularPagosPersonalNacional(distribucion);
 
-  // 8) Construir los bloques con factores de cabecera
+  // Paso 2: Parametros base
   const builderParams: CasaPorCasaNacionalBuilderParams = {
     totalEntrevistas: input.totalEntrevistas,
     duracionCuestionarioMin: input.duracionCuestionarioMin,
@@ -1212,23 +1221,76 @@ export function buildCotizacionCasaPorCasa(
     cobertura: input.cobertura,
     supervisores: input.supervisores,
     encuestadoresTotales: input.encuestadoresTotales,
-
     realizamosCuestionario: input.realizamosCuestionario ?? false,
     realizamosScript: input.realizamosScript ?? false,
     clienteSolicitaReporte: input.clienteSolicitaReporte ?? false,
     clienteSolicitaInformeBI: input.clienteSolicitaInformeBI ?? false,
     numeroOlasBi: input.numeroOlasBi ?? 2,
-
-    factorComisionable: 1,      // 100 %
-    factorNoComisionable: 0.05, // 5 %
+    factorComisionable: 1,
+    factorNoComisionable: 0.05,
     distribucion,
   };
 
-  return buildCasaPorCasaNacional(builderParams);
+  // Paso 3: Construcción de bloques
+  const items: CotizacionItemBuild[] = [];
 
-  
+  // === TRABAJO DE CAMPO ===
+  if (trabajoDeCampo) {
+    if (tipoTrabajoCampo === 'subcontratado') {
+      const totalConComision = Math.ceil((costoTrabajoSubcontratado! / 0.4) / 10) * 10;
 
+      items.push({
+        category: 'TRABAJO DE CAMPO',
+        description: 'Subcontratado',
+        personas: 1,
+        dias: 1,
+        costoUnitario: null,
+        costoTotal: costoTrabajoSubcontratado!,
+        comisionable: true,
+        totalConComision,
+        orden: 10,
+      });
+    } else {
+      const campo = buildTrabajoCampoCasaPorCasaNacional(builderParams);
+      items.push(...campo);
+    }
+  }
+
+  // === RECURSOS ===
+  const recursos = buildRecursosCasaPorCasaNacional(builderParams);
+  items.push(...recursos);
+
+  // === DIRECCIÓN ===
+  items.push(...buildDireccionCasaPorCasaNacional(builderParams));
+  items.push(buildRealizacionCuestionario(builderParams));
+  items.push(buildSupervisorScript(builderParams));
+  items.push(buildReporteResultados(builderParams));
+  items.push(buildInformeBi(builderParams));
+
+  // === PROCESAMIENTO ===
+  items.push(buildCodificacionProcesamiento(builderParams));
+  items.push(buildControlCalidadProcesamiento(builderParams));
+  items.push(buildBaseLimpiezaProcesamiento(builderParams));
+
+  // Paso 4: Calcular total
+  const sumaTotal = items.reduce(
+    (acc, item) => acc + (item.totalConComision ?? 0),
+    0,
+  );
+
+  const totalCobrar = Math.ceil(sumaTotal / 10) * 10;
+  const costoPorEntrevista =
+    input.totalEntrevistas > 0
+      ? Math.round((totalCobrar / input.totalEntrevistas) * 100) / 100
+      : 0;
+
+  return {
+    items,
+    totalCobrar,
+    costoPorEntrevista,
+  };
 }
+
 
 /**
  * Devuelve solo la distribución nacional (por departamento)

@@ -33,7 +33,7 @@ export class CotizacionesService {
   // ------------------------------------------------------
   // CREAR COTIZACIÓN
   // ------------------------------------------------------
-  async create(dto: CreateCotizacionDto, createdById: number) {
+async create(dto: CreateCotizacionDto, createdById: number) {
     const project = await this.prisma.project.findUnique({
       where: { id: dto.projectId },
       select: { id: true, clienteId: true },
@@ -73,10 +73,9 @@ export class CotizacionesService {
         studyType: dto.studyType,
         metodologia: dto.metodologia ?? null,
 
-        // ✅ Nuevos campos para trabajo de campo
         trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
-        trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? null,
-        trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? null,
+        trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? undefined,
+        trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
 
         numeroOlasBi: dto.numeroOlasBi ?? 2,
         totalEntrevistas: dto.totalEntrevistas,
@@ -107,13 +106,16 @@ export class CotizacionesService {
       clienteSolicitaReporte: dto.clienteSolicitaReporte,
       clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
       numeroOlasBi: dto.numeroOlasBi,
-      // ✅ Nuevos inputs de trabajo de campo
+
+      // ✅ Corrección aquí: pasar valores sin nulls, solo undefined
       trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
-      trabajoDeCampoTipo: dto.trabajoDeCampoTipo,
-      trabajoDeCampoCosto: dto.trabajoDeCampoCosto,
+      trabajoDeCampoTipo:
+        dto.trabajoDeCampoTipo === 'propio' || dto.trabajoDeCampoTipo === 'subcontratado'
+          ? dto.trabajoDeCampoTipo
+          : undefined,
+      trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
     });
 
-    // Crear ítems resultantes
     if (builderResult.items.length > 0) {
       await this.prisma.cotizacionItem.createMany({
         data: builderResult.items.map((item) => ({
@@ -131,7 +133,6 @@ export class CotizacionesService {
       });
     }
 
-    // Guardar totales globales
     await this.prisma.cotizacion.update({
       where: { id: cotizacion.id },
       data: {
@@ -406,10 +407,46 @@ export class CotizacionesService {
       clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
       numeroOlasBi: cot.numeroOlasBi ?? 2,
       trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
-      trabajoDeCampoTipo: cot.trabajoDeCampoTipo,
-      trabajoDeCampoCosto: cot.trabajoDeCampoCosto,
+      trabajoDeCampoTipo:
+      cot.trabajoDeCampoTipo === 'propio' || cot.trabajoDeCampoTipo === 'subcontratado'
+      ? cot.trabajoDeCampoTipo
+      : undefined,
+
+trabajoDeCampoCosto: cot.trabajoDeCampoCosto ?? undefined,
+
     });
 
     return result;
   }
+
+  // ------------------------------------------------------
+// ELIMINAR COTIZACIÓN
+// ------------------------------------------------------
+async remove(id: number, userId: number) {
+  const cotizacion = await this.prisma.cotizacion.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      createdById: true,
+      status: true,
+    },
+  });
+
+  if (!cotizacion) {
+    throw new NotFoundException('Cotización no encontrada');
+  }
+
+  if (cotizacion.status === CotizacionStatus.APROBADO) {
+    throw new BadRequestException('No se puede eliminar una cotización aprobada');
+  }
+
+  if (cotizacion.createdById !== userId) {
+    throw new ForbiddenException('Solo el creador puede eliminar la cotización');
+  }
+
+  await this.prisma.cotizacion.delete({ where: { id } });
+
+  return { message: 'Cotización eliminada correctamente' };
+}
+
 }
