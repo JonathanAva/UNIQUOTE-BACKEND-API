@@ -44,6 +44,21 @@ export class ConstantesService {
     });
   }
 
+  async findByCategoria(categoria: string) {
+  return this.prisma.constante.findMany({
+    where: {
+      categoria: {
+        equals: categoria,
+        mode: 'insensitive', // Opcional: ignora mayúsculas/minúsculas
+      },
+    },
+    orderBy: {
+      subcategoria: 'asc',
+    },
+  });
+}
+
+
   async remove(id: number) {
     const existe = await this.prisma.constante.findUnique({
       where: { id },

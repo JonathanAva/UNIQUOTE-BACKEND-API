@@ -53,4 +53,10 @@ export class ConstantesController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.constantesService.remove(id);
   }
+
+  @Get('categoria/:categoria')
+async getByCategoria(@Param('categoria') categoria: string) {
+  return this.constantesService.findByCategoria(categoria);
+}
+
 }
