@@ -859,3 +859,67 @@ export function calcularPagosPersonalNacional(
     totalPagoSupervisoresGlobal,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Build principal de distribución nacional (composición de pasos anteriores)
+// ---------------------------------------------------------------------------
+
+export interface ParamsDistribucionNacional {
+
+  totalEntrevistas: number;
+  duracionCuestionarioMin: number;
+  tipoEntrevista: string;
+  penetracionCategoria: number;
+  cobertura: string;
+  supervisores: number;
+  encuestadoresTotales: number;
+  realizamosCuestionario: boolean;
+  realizamosScript: boolean;
+  clienteSolicitaReporte: boolean;
+  clienteSolicitaInformeBI: boolean;
+  numeroOlasBi: number;
+  trabajoDeCampoRealiza: boolean;
+  trabajoDeCampoTipo?: 'propio' | 'subcontratado';
+  trabajoDeCampoCosto?: number;
+}
+
+export function buildDistribucionNacional(
+  params: ParamsDistribucionNacional,
+): DistribucionNacionalResult {
+  let distribucion = distribuirEntrevistasNacional(
+    params.totalEntrevistas,
+    params.tipoEntrevista,
+  );
+
+  distribucion = aplicarRendimientoNacional(distribucion, {
+    duracionCuestionarioMin: params.duracionCuestionarioMin,
+    penetracion: params.penetracionCategoria,
+    totalEncuestadores: params.encuestadoresTotales,
+    segmentSize: 8,
+    filterMinutes: 3,
+    searchMinutes: 10,
+    desplazamientoMin: 15,
+    groupSize: 4,
+  });
+
+  distribucion = aplicarEncuestadoresYSupervisoresNacional(
+    distribucion,
+    params.encuestadoresTotales,
+    { groupSize: 4, supervisorSplit: 4 },
+  );
+
+  distribucion = aplicarDiasCampoYCostosNacional(distribucion);
+
+  distribucion = aplicarPrecioBoletaNacional(distribucion, {
+    duracionCuestionarioMin: params.duracionCuestionarioMin,
+    penetracion: params.penetracionCategoria,
+  });
+
+  distribucion = calcularTotalesViaticosTransporteHotelNacional(distribucion);
+
+  distribucion = calcularPagosPersonalNacional(distribucion);
+
+  return distribucion;
+}
+
+

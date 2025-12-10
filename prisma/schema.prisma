@@ -244,3 +244,34 @@ model CotizacionItem {
   @@index([cotizacionId])
   @@index([category])
 }
+
+// =====================================================
+// MODELO: Constante
+// =====================================================
+/// Constantes de cálculo dinámico utilizadas en el motor de cotización.
+/// Estas pueden agruparse por categoría y subcategoría.
+/// Ejemplos:
+/// - categoría: "Trabajo de Campo", subcategoría: "Viático - San Miguel"
+/// - categoría: "Procesamiento", subcategoría: "Codificación"
+model Constante {
+  id           Int      @id @default(autoincrement())
+
+  /// Categoría general (ej. Trabajo de Campo, Recursos, Dirección, Procesamiento)
+  categoria    String
+
+  /// Subcategoría específica (ej. Viático - San Miguel, Pago Encuestador Diario)
+  subcategoria String
+
+  /// Valor numérico editable
+  valor        Float
+
+  /// Unidad opcional (ej. "$", "por hora", "USD", etc.)
+  unidad       String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  /// Cada combinación categoría + subcategoría debe ser única
+  @@unique([categoria, subcategoria])
+  @@index([categoria])
+}

@@ -96,7 +96,7 @@ export class CreateCotizacionDto {
   trabajoDeCampoTipo?: TrabajoDeCampoTipo;
 
   @ApiProperty({
-    example: 3000,
+    example: 0,
     required: false,
     description: 'Costo total del trabajo de campo (solo si es subcontratado)',
   })
@@ -134,7 +134,7 @@ export class CreateCotizacionDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  penetracionCategoria: number;
+  penetracionCategoria: string | number;
 
   @ApiProperty({ example: 'Nacional', description: 'Cobertura del estudio' })
   @IsString()

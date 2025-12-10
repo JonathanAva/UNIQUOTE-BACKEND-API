@@ -12,6 +12,7 @@ import { ClientesModule } from './modules/clients/clientes.module';
 import { ContactosModule } from './modules/contactos/contactos.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { CotizacionesModule } from './modules/cotizaciones/cotizaciones.module';
+import { ConstantesModule } from './modules/constantes/constantes.module';
 
 
 
@@ -45,6 +46,7 @@ import { CotizacionesModule } from './modules/cotizaciones/cotizaciones.module';
     ContactosModule,
     ProjectsModule,
     CotizacionesModule,
+    ConstantesModule,
   ],
 })
 export class AppModule {}

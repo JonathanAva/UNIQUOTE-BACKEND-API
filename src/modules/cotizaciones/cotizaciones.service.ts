@@ -11,14 +11,19 @@ import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { CotizacionStatus } from '@prisma/client';
-import {
-  buildCotizacionCasaPorCasa,
-  buildDistribucionNacional,
-} from './builder/casa-por-casa.builder';
+import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder';
+import { buildDistribucionNacional } from '@/modules/cotizaciones/engine/casa-por-casa/nacional.engine';
+import { ConstantesService } from '@/modules/constantes/constantes.service';
+
+
 
 @Injectable()
 export class CotizacionesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly constantesService: ConstantesService,   
+  ) {}
+
 
   // ------------------------------------------------------
   // GENERAR CÓDIGO
@@ -34,70 +39,71 @@ export class CotizacionesService {
   // CREAR COTIZACIÓN
   // ------------------------------------------------------
 async create(dto: CreateCotizacionDto, createdById: number) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: dto.projectId },
-      select: { id: true, clienteId: true },
+  const project = await this.prisma.project.findUnique({
+    where: { id: dto.projectId },
+    select: { id: true, clienteId: true },
+  });
+
+  if (!project) throw new NotFoundException('Proyecto no encontrado');
+
+  if (dto.contactoId) {
+    const contacto = await this.prisma.contactoEmpresa.findFirst({
+      where: { id: dto.contactoId, clienteId: project.clienteId },
     });
 
-    if (!project) throw new NotFoundException('Proyecto no encontrado');
-
-    if (dto.contactoId) {
-      const contacto = await this.prisma.contactoEmpresa.findFirst({
-        where: { id: dto.contactoId, clienteId: project.clienteId },
-      });
-
-      if (!contacto) {
-        throw new NotFoundException(
-          'El contacto no pertenece al cliente del proyecto',
-        );
-      }
-    }
-
-    if (dto.studyType.toLowerCase() === 'cualitativo' && !dto.metodologia) {
-      throw new BadRequestException(
-        'Debe seleccionar una metodología si el estudio es cualitativo',
+    if (!contacto) {
+      throw new NotFoundException(
+        'El contacto no pertenece al cliente del proyecto',
       );
     }
+  }
 
-    const code = await this.generateCotizacionCode(dto.projectId);
+  if (dto.studyType.toLowerCase() === 'cualitativo' && !dto.metodologia) {
+    throw new BadRequestException(
+      'Debe seleccionar una metodología si el estudio es cualitativo',
+    );
+  }
 
-    const cotizacion = await this.prisma.cotizacion.create({
-      data: {
-        projectId: dto.projectId,
-        contactoId: dto.contactoId ?? null,
-        name: dto.name,
-        code,
-        createdById,
-        status: CotizacionStatus.ENVIADO,
+  // ✨ Normaliza penetracion
+  let penetracion: number;
+  if (typeof dto.penetracionCategoria === 'string') {
+    const value = dto.penetracionCategoria.trim().toLowerCase();
 
-        studyType: dto.studyType,
-        metodologia: dto.metodologia ?? null,
+    if (value === 'fácil') penetracion = 0.85;
+    else if (value === 'medio') penetracion = 0.60;
+    else if (value === 'difícil') penetracion = 0.35;
+    else if (value.endsWith('%')) penetracion = parseFloat(value) / 100;
+    else penetracion = parseFloat(value);
+  } else {
+    penetracion = dto.penetracionCategoria;
+  }
 
-        trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
-        trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? undefined,
-        trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
+  if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+    throw new BadRequestException(
+      'penetracionCategoria debe ser un número válido entre 0.01 y 1.00, o usar: fácil / medio / difícil / porcentaje',
+    );
+  }
 
-        numeroOlasBi: dto.numeroOlasBi ?? 2,
-        totalEntrevistas: dto.totalEntrevistas,
-        duracionCuestionarioMin: dto.duracionCuestionarioMin,
-        tipoEntrevista: dto.tipoEntrevista,
-        penetracionCategoria: dto.penetracionCategoria,
-        cobertura: dto.cobertura,
-        supervisores: dto.supervisores,
-        encuestadoresTotales: dto.encuestadoresTotales,
-        realizamosCuestionario: dto.realizamosCuestionario,
-        realizamosScript: dto.realizamosScript,
-        clienteSolicitaReporte: dto.clienteSolicitaReporte,
-        clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
-        incentivoTotal: dto.incentivoTotal ?? null,
-      },
-    });
+  const code = await this.generateCotizacionCode(dto.projectId);
 
-    const builderResult = buildCotizacionCasaPorCasa({
+  const cotizacion = await this.prisma.cotizacion.create({
+    data: {
+      projectId: dto.projectId,
+      contactoId: dto.contactoId ?? null,
+      name: dto.name,
+      code,
+      createdById,
+      status: CotizacionStatus.ENVIADO,
+      studyType: dto.studyType,
+      metodologia: dto.metodologia ?? null,
+      trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? undefined,
+      trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
+      numeroOlasBi: dto.numeroOlasBi ?? 2,
       totalEntrevistas: dto.totalEntrevistas,
       duracionCuestionarioMin: dto.duracionCuestionarioMin,
       tipoEntrevista: dto.tipoEntrevista,
-      penetracionCategoria: dto.penetracionCategoria,
+      penetracionCategoria: penetracion, // 💥 Aquí el valor ya validado
       cobertura: dto.cobertura,
       supervisores: dto.supervisores,
       encuestadoresTotales: dto.encuestadoresTotales,
@@ -105,46 +111,65 @@ async create(dto: CreateCotizacionDto, createdById: number) {
       realizamosScript: dto.realizamosScript,
       clienteSolicitaReporte: dto.clienteSolicitaReporte,
       clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
-      numeroOlasBi: dto.numeroOlasBi,
+      incentivoTotal: dto.incentivoTotal ?? null,
+    },
+  });
 
-      // ✅ Corrección aquí: pasar valores sin nulls, solo undefined
+  const builderResult = await buildCotizacionCasaPorCasa(
+    {
+      totalEntrevistas: dto.totalEntrevistas,
+      duracionCuestionarioMin: dto.duracionCuestionarioMin,
+      tipoEntrevista: dto.tipoEntrevista,
+      penetracionCategoria: penetracion, // 💥 Usamos la misma variable aquí
+      cobertura: dto.cobertura,
+      supervisores: dto.supervisores,
+      encuestadoresTotales: dto.encuestadoresTotales,
+      realizamosCuestionario: dto.realizamosCuestionario,
+      realizamosScript: dto.realizamosScript,
+      clienteSolicitaReporte: dto.clienteSolicitaReporte,
+      clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
+      numeroOlasBi: dto.numeroOlasBi ?? 2,
       trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
       trabajoDeCampoTipo:
-        dto.trabajoDeCampoTipo === 'propio' || dto.trabajoDeCampoTipo === 'subcontratado'
+        dto.trabajoDeCampoTipo === 'propio' ||
+        dto.trabajoDeCampoTipo === 'subcontratado'
           ? dto.trabajoDeCampoTipo
           : undefined,
       trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
+    },
+    this.constantesService,
+  );
+
+  if (builderResult.items.length > 0) {
+    await this.prisma.cotizacionItem.createMany({
+      data: builderResult.items.map((item) => ({
+        cotizacionId: cotizacion.id,
+        category: item.category,
+        description: item.description,
+        personas: item.personas,
+        dias: item.dias,
+        costoUnitario: item.costoUnitario,
+        costoTotal: item.costoTotal,
+        comisionable: item.comisionable,
+        totalConComision: item.totalConComision,
+        orden: item.orden,
+      })),
     });
-
-    if (builderResult.items.length > 0) {
-      await this.prisma.cotizacionItem.createMany({
-        data: builderResult.items.map((item) => ({
-          cotizacionId: cotizacion.id,
-          category: item.category,
-          description: item.description,
-          personas: item.personas,
-          dias: item.dias,
-          costoUnitario: item.costoUnitario,
-          costoTotal: item.costoTotal,
-          comisionable: item.comisionable,
-          totalConComision: item.totalConComision,
-          orden: item.orden,
-        })),
-      });
-    }
-
-    await this.prisma.cotizacion.update({
-      where: { id: cotizacion.id },
-      data: {
-        totalCobrar: builderResult.totalCobrar,
-        costoPorEntrevista: builderResult.costoPorEntrevista,
-        factorComisionablePct: 1,
-        factorNoComisionablePct: 0.05,
-      },
-    });
-
-    return this.findOne(cotizacion.id);
   }
+
+  await this.prisma.cotizacion.update({
+    where: { id: cotizacion.id },
+    data: {
+      totalCobrar: builderResult.totalCobrar,
+      costoPorEntrevista: builderResult.costoPorEntrevista,
+      factorComisionablePct: 1,
+      factorNoComisionablePct: 0.05,
+    },
+  });
+
+  return this.findOne(cotizacion.id);
+}
+
 
   // ------------------------------------------------------
   // OBTENER UNA COTIZACIÓN
@@ -178,7 +203,7 @@ async create(dto: CreateCotizacionDto, createdById: number) {
         studyType: true,
         metodologia: true,
 
-        // ✅ Nuevos campos
+        
         trabajoDeCampoRealiza: true,
         trabajoDeCampoTipo: true,
         trabajoDeCampoCosto: true,
@@ -239,38 +264,66 @@ async create(dto: CreateCotizacionDto, createdById: number) {
   // ------------------------------------------------------
   // ACTUALIZAR
   // ------------------------------------------------------
-  async update(id: number, dto: UpdateCotizacionDto, userId: number) {
-    const current = await this.prisma.cotizacion.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException('Cotización no encontrada');
+async update(id: number, dto: UpdateCotizacionDto, userId: number) {
+  const current = await this.prisma.cotizacion.findUnique({ where: { id } });
+  if (!current) throw new NotFoundException('Cotización no encontrada');
 
-    if (
-      current.status === CotizacionStatus.APROBADO ||
-      current.status === CotizacionStatus.NO_APROBADO
-    ) {
-      throw new BadRequestException(
-        'No se puede editar una cotización aprobada o no aprobada',
-      );
-    }
-
-    if (current.createdById !== userId) {
-      throw new ForbiddenException(
-        'Solo el usuario que creó la cotización puede actualizarla',
-      );
-    }
-
-    if (dto.studyType?.toLowerCase() === 'cualitativo' && !dto.metodologia) {
-      throw new BadRequestException(
-        'Debe seleccionar una metodología si el estudio es cualitativo',
-      );
-    }
-
-    await this.prisma.cotizacion.update({
-      where: { id },
-      data: dto,
-    });
-
-    return this.findOne(id);
+  if (
+    current.status === CotizacionStatus.APROBADO ||
+    current.status === CotizacionStatus.NO_APROBADO
+  ) {
+    throw new BadRequestException(
+      'No se puede editar una cotización aprobada o no aprobada',
+    );
   }
+
+  if (current.createdById !== userId) {
+    throw new ForbiddenException(
+      'Solo el usuario que creó la cotización puede actualizarla',
+    );
+  }
+
+  if (dto.studyType?.toLowerCase() === 'cualitativo' && !dto.metodologia) {
+    throw new BadRequestException(
+      'Debe seleccionar una metodología si el estudio es cualitativo',
+    );
+  }
+
+  // ✅ Normalizar penetracionCategoria si está presente
+  let penetracion: number | undefined = undefined;
+
+  if (dto.penetracionCategoria !== undefined) {
+    if (typeof dto.penetracionCategoria === 'string') {
+      const value = dto.penetracionCategoria.trim().toLowerCase();
+
+      if (value === 'fácil') penetracion = 0.85;
+      else if (value === 'medio') penetracion = 0.6;
+      else if (value === 'difícil') penetracion = 0.35;
+      else if (value.endsWith('%')) penetracion = parseFloat(value) / 100;
+      else penetracion = parseFloat(value);
+    } else {
+      penetracion = dto.penetracionCategoria;
+    }
+
+    if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+      throw new BadRequestException(
+        'penetracionCategoria debe ser un número válido entre 0.01 y 1.00, o usar: fácil / medio / difícil / porcentaje',
+      );
+    }
+  }
+
+  await this.prisma.cotizacion.update({
+    where: { id },
+    data: {
+      ...dto,
+      penetracionCategoria: penetracion ?? undefined,
+      projectId: dto.projectId ?? undefined, // Para evitar conflicto de tipo
+    },
+  });
+
+  return this.findOne(id);
+}
+
 
   // ------------------------------------------------------
   // CAMBIAR ESTADO
@@ -397,7 +450,11 @@ async create(dto: CreateCotizacionDto, createdById: number) {
       totalEntrevistas: cot.totalEntrevistas,
       duracionCuestionarioMin: cot.duracionCuestionarioMin,
       tipoEntrevista: cot.tipoEntrevista,
-      penetracionCategoria: cot.penetracionCategoria,
+      penetracionCategoria:
+      cot.penetracionCategoria > 1
+      ? cot.penetracionCategoria / 100
+      : cot.penetracionCategoria,
+
       cobertura: cot.cobertura,
       supervisores: cot.supervisores,
       encuestadoresTotales: cot.encuestadoresTotales,

@@ -257,10 +257,10 @@ npm run start:prod
 
 ---
 
-## 👥 Contribuciones
+## Semillas
 
-¿Encontraste un bug o quieres proponer una mejora?
-Haz un fork, crea una rama y envía un pull request 🚀
+npx ts-node src/seeds/seed-constantes.ts
+npx ts-node src/seeds/seed-roles.ts
 
 ---
 
