@@ -11,8 +11,10 @@ import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { CotizacionStatus } from '@prisma/client';
-import { buildDistribucionNacional } from './builder/casa-por-casa.builder';
-import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder';
+import {
+  buildCotizacionCasaPorCasa,
+  buildDistribucionNacional,
+} from './builder/casa-por-casa.builder';
 
 @Injectable()
 export class CotizacionesService {
@@ -59,7 +61,6 @@ export class CotizacionesService {
 
     const code = await this.generateCotizacionCode(dto.projectId);
 
-    // Crear cotización base
     const cotizacion = await this.prisma.cotizacion.create({
       data: {
         projectId: dto.projectId,
@@ -71,9 +72,13 @@ export class CotizacionesService {
 
         studyType: dto.studyType,
         metodologia: dto.metodologia ?? null,
-        trabajoDeCampo: dto.trabajoDeCampo,
-        numeroOlasBi: dto.numeroOlasBi ?? 2,
 
+        // ✅ Nuevos campos para trabajo de campo
+        trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
+        trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? null,
+        trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? null,
+
+        numeroOlasBi: dto.numeroOlasBi ?? 2,
         totalEntrevistas: dto.totalEntrevistas,
         duracionCuestionarioMin: dto.duracionCuestionarioMin,
         tipoEntrevista: dto.tipoEntrevista,
@@ -89,7 +94,6 @@ export class CotizacionesService {
       },
     });
 
-    // Builder
     const builderResult = buildCotizacionCasaPorCasa({
       totalEntrevistas: dto.totalEntrevistas,
       duracionCuestionarioMin: dto.duracionCuestionarioMin,
@@ -103,10 +107,13 @@ export class CotizacionesService {
       clienteSolicitaReporte: dto.clienteSolicitaReporte,
       clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
       numeroOlasBi: dto.numeroOlasBi,
-      trabajoDeCampo: dto.trabajoDeCampo,
+      // ✅ Nuevos inputs de trabajo de campo
+      trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo: dto.trabajoDeCampoTipo,
+      trabajoDeCampoCosto: dto.trabajoDeCampoCosto,
     });
 
-    // Guardar ítems
+    // Crear ítems resultantes
     if (builderResult.items.length > 0) {
       await this.prisma.cotizacionItem.createMany({
         data: builderResult.items.map((item) => ({
@@ -124,7 +131,7 @@ export class CotizacionesService {
       });
     }
 
-    // Guardar totales resultantes
+    // Guardar totales globales
     await this.prisma.cotizacion.update({
       where: { id: cotizacion.id },
       data: {
@@ -141,70 +148,68 @@ export class CotizacionesService {
   // ------------------------------------------------------
   // OBTENER UNA COTIZACIÓN
   // ------------------------------------------------------
-async findOne(id: number) {
-  const cot = await this.prisma.cotizacion.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      status: true,
+  async findOne(id: number) {
+    const cot = await this.prisma.cotizacion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        status: true,
 
-      project: {
-        select: {
-          id: true,
-          name: true,
-          cliente: {
-            select: {
-              id: true,
-              empresa: true,
-              razonSocial: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            cliente: {
+              select: {
+                id: true,
+                empresa: true,
+                razonSocial: true,
+              },
             },
           },
         },
+
+        contacto: true,
+        createdBy: { select: { id: true, name: true, lastName: true } },
+
+        studyType: true,
+        metodologia: true,
+
+        // ✅ Nuevos campos
+        trabajoDeCampoRealiza: true,
+        trabajoDeCampoTipo: true,
+        trabajoDeCampoCosto: true,
+
+        numeroOlasBi: true,
+        totalEntrevistas: true,
+        duracionCuestionarioMin: true,
+        tipoEntrevista: true,
+        penetracionCategoria: true,
+        cobertura: true,
+        supervisores: true,
+        encuestadoresTotales: true,
+        realizamosCuestionario: true,
+        realizamosScript: true,
+        clienteSolicitaReporte: true,
+        clienteSolicitaInformeBI: true,
+        incentivoTotal: true,
+
+        totalCobrar: true,
+        costoPorEntrevista: true,
+        factorComisionablePct: true,
+        factorNoComisionablePct: true,
+
+        items: { orderBy: { orden: 'asc' } },
+        createdAt: true,
+        updatedAt: true,
       },
+    });
 
-      contacto: true,
-
-      createdBy: {
-        select: { id: true, name: true, lastName: true },
-      },
-
-      // Campos que sí pertenecen a Cotización
-      studyType: true,
-      metodologia: true,
-      trabajoDeCampo: true,
-      numeroOlasBi: true,
-
-      totalEntrevistas: true,
-      duracionCuestionarioMin: true,
-      tipoEntrevista: true,
-      penetracionCategoria: true,
-      cobertura: true,
-      supervisores: true,
-      encuestadoresTotales: true,
-      realizamosCuestionario: true,
-      realizamosScript: true,
-      clienteSolicitaReporte: true,
-      clienteSolicitaInformeBI: true,
-      incentivoTotal: true,
-
-      totalCobrar: true,
-      costoPorEntrevista: true,
-      factorComisionablePct: true,
-      factorNoComisionablePct: true,
-
-      items: { orderBy: { orden: 'asc' } },
-
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-
-  if (!cot) throw new NotFoundException('Cotización no encontrada');
-  return cot;
-}
-
+    if (!cot) throw new NotFoundException('Cotización no encontrada');
+    return cot;
+  }
 
   // ------------------------------------------------------
   // LISTAR POR PROYECTO
@@ -231,13 +236,10 @@ async findOne(id: number) {
   }
 
   // ------------------------------------------------------
-  // UPDATE COTIZACIÓN
+  // ACTUALIZAR
   // ------------------------------------------------------
   async update(id: number, dto: UpdateCotizacionDto, userId: number) {
-    const current = await this.prisma.cotizacion.findUnique({
-      where: { id },
-    });
-
+    const current = await this.prisma.cotizacion.findUnique({ where: { id } });
     if (!current) throw new NotFoundException('Cotización no encontrada');
 
     if (
@@ -248,7 +250,6 @@ async findOne(id: number) {
         'No se puede editar una cotización aprobada o no aprobada',
       );
     }
-
 
     if (current.createdById !== userId) {
       throw new ForbiddenException(
@@ -271,7 +272,7 @@ async findOne(id: number) {
   }
 
   // ------------------------------------------------------
-  // UPDATE STATUS
+  // CAMBIAR ESTADO
   // ------------------------------------------------------
   async updateStatus(id: number, dto: UpdateCotizacionStatusDto, userId: number) {
     const current = await this.prisma.cotizacion.findUnique({
@@ -304,51 +305,47 @@ async findOne(id: number) {
     });
 
     if (!cot) throw new NotFoundException('Cotización no encontrada');
-
     if (cot.status !== CotizacionStatus.APROBADO) {
-      throw new BadRequestException(
-        'Solo se pueden clonar cotizaciones aprobadas',
-      );
+      throw new BadRequestException('Solo se pueden clonar cotizaciones aprobadas');
     }
 
     const code = await this.generateCotizacionCode(cot.projectId);
 
     const clone = await this.prisma.$transaction(async (tx) => {
-const nueva = await tx.cotizacion.create({
-  data: {
-    projectId: cot.projectId,
-    contactoId: cot.contactoId,
-    name: `${cot.name} (copia)`,
-    code,
-    status: CotizacionStatus.ENVIADO,
-    createdById: userId,
+      const nueva = await tx.cotizacion.create({
+        data: {
+          projectId: cot.projectId,
+          contactoId: cot.contactoId,
+          name: `${cot.name} (copia)`,
+          code,
+          status: CotizacionStatus.ENVIADO,
+          createdById: userId,
 
-    // Campos nuevos
-    studyType: cot.studyType,
-    metodologia: cot.metodologia,
-    trabajoDeCampo: cot.trabajoDeCampo,
-    numeroOlasBi: cot.numeroOlasBi,
+          studyType: cot.studyType,
+          metodologia: cot.metodologia,
+          trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
+          trabajoDeCampoTipo: cot.trabajoDeCampoTipo,
+          trabajoDeCampoCosto: cot.trabajoDeCampoCosto,
+          numeroOlasBi: cot.numeroOlasBi,
 
-    // Datos técnicos
-    totalEntrevistas: cot.totalEntrevistas,
-    duracionCuestionarioMin: cot.duracionCuestionarioMin,
-    tipoEntrevista: cot.tipoEntrevista,
-    penetracionCategoria: cot.penetracionCategoria,
-    cobertura: cot.cobertura,
-    supervisores: cot.supervisores,
-    encuestadoresTotales: cot.encuestadoresTotales,
-    realizamosCuestionario: cot.realizamosCuestionario,
-    realizamosScript: cot.realizamosScript,
-    clienteSolicitaReporte: cot.clienteSolicitaReporte,
-    clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
-    incentivoTotal: cot.incentivoTotal,
-    factorComisionablePct: cot.factorComisionablePct,
-    factorNoComisionablePct: cot.factorNoComisionablePct,
-    totalCobrar: cot.totalCobrar,
-    costoPorEntrevista: cot.costoPorEntrevista,
-  },
-});
-
+          totalEntrevistas: cot.totalEntrevistas,
+          duracionCuestionarioMin: cot.duracionCuestionarioMin,
+          tipoEntrevista: cot.tipoEntrevista,
+          penetracionCategoria: cot.penetracionCategoria,
+          cobertura: cot.cobertura,
+          supervisores: cot.supervisores,
+          encuestadoresTotales: cot.encuestadoresTotales,
+          realizamosCuestionario: cot.realizamosCuestionario,
+          realizamosScript: cot.realizamosScript,
+          clienteSolicitaReporte: cot.clienteSolicitaReporte,
+          clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
+          incentivoTotal: cot.incentivoTotal,
+          factorComisionablePct: cot.factorComisionablePct,
+          factorNoComisionablePct: cot.factorNoComisionablePct,
+          totalCobrar: cot.totalCobrar,
+          costoPorEntrevista: cot.costoPorEntrevista,
+        },
+      });
 
       if (cot.items.length > 0) {
         await tx.cotizacionItem.createMany({
@@ -367,77 +364,52 @@ const nueva = await tx.cotizacion.create({
   }
 
   // ------------------------------------------------------
-  // ELIMINAR
+  // DISTRIBUCIÓN NACIONAL
   // ------------------------------------------------------
-  async remove(id: number, userId: number) {
+  async getDistribucionNacional(cotizacionId: number) {
     const cot = await this.prisma.cotizacion.findUnique({
-      where: { id },
+      where: { id: cotizacionId },
+      select: {
+        id: true,
+        studyType: true,
+        trabajoDeCampoRealiza: true,
+        trabajoDeCampoTipo: true,
+        trabajoDeCampoCosto: true,
+        totalEntrevistas: true,
+        duracionCuestionarioMin: true,
+        tipoEntrevista: true,
+        penetracionCategoria: true,
+        cobertura: true,
+        supervisores: true,
+        encuestadoresTotales: true,
+        realizamosCuestionario: true,
+        realizamosScript: true,
+        clienteSolicitaReporte: true,
+        clienteSolicitaInformeBI: true,
+        numeroOlasBi: true,
+      },
     });
 
     if (!cot) throw new NotFoundException('Cotización no encontrada');
 
-    if (cot.createdById !== userId) {
-      throw new ForbiddenException(
-        'Solo el usuario que creó la cotización puede eliminarla',
-      );
-    }
+    const result = buildDistribucionNacional({
+      totalEntrevistas: cot.totalEntrevistas,
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      tipoEntrevista: cot.tipoEntrevista,
+      penetracionCategoria: cot.penetracionCategoria,
+      cobertura: cot.cobertura,
+      supervisores: cot.supervisores,
+      encuestadoresTotales: cot.encuestadoresTotales,
+      realizamosCuestionario: cot.realizamosCuestionario,
+      realizamosScript: cot.realizamosScript,
+      clienteSolicitaReporte: cot.clienteSolicitaReporte,
+      clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
+      numeroOlasBi: cot.numeroOlasBi ?? 2,
+      trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo: cot.trabajoDeCampoTipo,
+      trabajoDeCampoCosto: cot.trabajoDeCampoCosto,
+    });
 
-    if (cot.status !== CotizacionStatus.NO_APROBADO) {
-      throw new BadRequestException(
-        'Solo se pueden eliminar cotizaciones rechazadas'
-      );
-    }
-
-    await this.prisma.cotizacion.delete({ where: { id } });
-    return { deleted: true };
+    return result;
   }
-
-  // ------------------------------------------------------
-// DISTRIBUCIÓN NACIONAL (para tabla por departamento)
-// ------------------------------------------------------
-async getDistribucionNacional(cotizacionId: number) {
-  const cot = await this.prisma.cotizacion.findUnique({
-    where: { id: cotizacionId },
-    select: {
-      id: true,
-      studyType: true,
-      trabajoDeCampo: true,
-      totalEntrevistas: true,
-      duracionCuestionarioMin: true,
-      tipoEntrevista: true,
-      penetracionCategoria: true,
-      cobertura: true,
-      supervisores: true,
-      encuestadoresTotales: true,
-      realizamosCuestionario: true,
-      realizamosScript: true,
-      clienteSolicitaReporte: true,
-      clienteSolicitaInformeBI: true,
-      numeroOlasBi: true,
-    },
-  });
-
-  if (!cot) throw new NotFoundException('Cotización no encontrada');
-
-  const result = buildDistribucionNacional({
-    totalEntrevistas: cot.totalEntrevistas,
-    duracionCuestionarioMin: cot.duracionCuestionarioMin,
-    tipoEntrevista: cot.tipoEntrevista,
-    penetracionCategoria: cot.penetracionCategoria,
-    cobertura: cot.cobertura,
-    supervisores: cot.supervisores,
-    encuestadoresTotales: cot.encuestadoresTotales,
-    realizamosCuestionario: cot.realizamosCuestionario,
-    realizamosScript: cot.realizamosScript,
-    clienteSolicitaReporte: cot.clienteSolicitaReporte,
-    clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
-    numeroOlasBi: cot.numeroOlasBi ?? 2,
-    trabajoDeCampo: cot.trabajoDeCampo,
-  });
-
-  return result;
 }
-
-
-}
-

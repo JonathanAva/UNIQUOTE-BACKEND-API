@@ -8,6 +8,8 @@ import {
   IsString,
   Max,
   Min,
+  ValidateIf,
+  IsNumber,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -29,6 +31,14 @@ export enum MetodologiaEnum {
   ONLINE = 'Online',
   PUNTO_AFLUENCIA = 'Punto de afluencia',
   TELEFONICO = 'Telefonico',
+}
+
+/**
+ * Enum para el tipo de trabajo de campo
+ */
+export enum TrabajoDeCampoTipo {
+  PROPIO = 'propio',
+  SUBCONTRATADO = 'subcontratado',
 }
 
 /**
@@ -81,11 +91,31 @@ export class CreateCotizacionDto {
 
   @ApiProperty({
     example: true,
-    description:
-      'Indica si esta cotización incluye trabajo de campo (campo requerido)',
+    description: '¿Se realizará trabajo de campo?',
   })
   @IsBoolean()
-  trabajoDeCampo: boolean;
+  realizaraTrabajoDeCampo: boolean;
+
+  @ApiProperty({
+    example: 'propio',
+    enum: TrabajoDeCampoTipo,
+    required: false,
+    description: 'Tipo de trabajo de campo: propio o subcontratado',
+  })
+  @ValidateIf((o) => o.realizaraTrabajoDeCampo === true)
+  @IsEnum(TrabajoDeCampoTipo)
+  trabajoDeCampoTipo?: TrabajoDeCampoTipo;
+
+  @ApiProperty({
+    example: 3000,
+    required: false,
+    description:
+      'Costo total del trabajo de campo si es subcontratado (requerido solo si aplica)',
+  })
+  @ValidateIf((o) => o.trabajoDeCampoTipo === TrabajoDeCampoTipo.SUBCONTRATADO)
+  @IsNumber()
+  @Min(1)
+  costoTrabajoDeCampo?: number;
 
   @ApiProperty({
     example: 2,
