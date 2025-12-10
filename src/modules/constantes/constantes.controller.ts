@@ -68,4 +68,18 @@ async getByCategoria(
   return this.constantesService.findByCategoria(nombre);
 }
 
+@Get('subcategoria/:nombre')
+@ApiOperation({ summary: 'Obtener constantes por subcategoría' })
+@ApiParam({
+  name: 'nombre',
+  required: true,
+  description: 'Nombre exacto de la subcategoría (ej. "Viático - San Miguel")',
+})
+async getBySubcategoria(
+  @Param('nombre') nombre: string,
+) {
+  return this.constantesService.findBySubcategoria(nombre);
+}
+
+
 }

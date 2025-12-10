@@ -68,6 +68,33 @@ export class ConstantesService {
   }
 
 
+async findBySubcategoria(nombre: string) {
+  const constantes = await this.prisma.constante.findMany({
+    where: {
+      subcategoria: {
+        contains: nombre,
+        mode: 'insensitive', // ignora mayúsculas
+      },
+    },
+    orderBy: {
+      categoria: 'asc',
+    },
+    select: {
+      id: true,
+      categoria: true,
+      subcategoria: true,
+      valor: true,
+      unidad: true,
+    },
+  });
+
+  if (!constantes.length) {
+    throw new NotFoundException(`No se encontraron constantes con la subcategoría que contenga "${nombre}"`);
+  }
+
+  return constantes;
+}
+
 
   async remove(id: number) {
     const existe = await this.prisma.constante.findUnique({
