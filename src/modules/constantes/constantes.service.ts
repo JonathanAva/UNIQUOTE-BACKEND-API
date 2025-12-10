@@ -44,19 +44,29 @@ export class ConstantesService {
     });
   }
 
-  async findByCategoria(categoria: string) {
-  return this.prisma.constante.findMany({
-    where: {
-      categoria: {
-        equals: categoria,
-        mode: 'insensitive', // Opcional: ignora mayúsculas/minúsculas
+  async findByCategoria(nombre: string) {
+    const constantes = await this.prisma.constante.findMany({
+      where: {
+        categoria: nombre,
       },
-    },
-    orderBy: {
-      subcategoria: 'asc',
-    },
-  });
-}
+      orderBy: {
+        subcategoria: 'asc',
+      },
+      select: {
+        id: true,
+        subcategoria: true,
+        valor: true,
+        unidad: true,
+      },
+    });
+
+    if (!constantes.length) {
+      throw new NotFoundException(`No se encontraron constantes en la categoría "${nombre}"`);
+    }
+
+    return constantes;
+  }
+
 
 
   async remove(id: number) {

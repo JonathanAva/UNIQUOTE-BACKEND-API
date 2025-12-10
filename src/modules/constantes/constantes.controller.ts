@@ -54,9 +54,18 @@ export class ConstantesController {
     return this.constantesService.remove(id);
   }
 
-  @Get('categoria/:categoria')
-async getByCategoria(@Param('categoria') categoria: string) {
-  return this.constantesService.findByCategoria(categoria);
+
+@Get('categoria/:nombre')
+@ApiOperation({ summary: 'Obtener constantes por categoría' })
+@ApiParam({
+  name: 'nombre',
+  required: true,
+  description: 'Nombre exacto de la categoría (ej. "Trabajo de Campo")',
+})
+async getByCategoria(
+  @Param('nombre') nombre: string,
+) {
+  return this.constantesService.findByCategoria(nombre);
 }
 
 }
