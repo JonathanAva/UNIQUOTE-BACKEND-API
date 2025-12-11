@@ -461,57 +461,43 @@ export function aplicarRendimientoNacional(
   params: ParamsRendimiento,
 ): DistribucionNacionalResult {
   const {
-    duracionCuestionarioMin,
-    penetracion,
-    totalEncuestadores,
-    segmentSize,
-    filterMinutes,
-    searchMinutes,
-    desplazamientoMin,
-    groupSize,
+    duracionCuestionarioMin, // P120
+    penetracion,             // tasa 0–1 (p)
+    totalEncuestadores,      // Q126
+    segmentSize,             // P124
+    filterMinutes,           // P121
+    searchMinutes,           // P123
+    desplazamientoMin,       // P125
+    groupSize,               // divisor para P126 (p. ej. 4)
   } = params;
 
-  if (!Number.isFinite(duracionCuestionarioMin) || duracionCuestionarioMin <= 0) {
-    throw new Error('duracionCuestionarioMin debe ser > 0');
-  }
-  if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
-    throw new Error('penetracion debe estar en (0,1]');
-  }
-  if (!Number.isFinite(totalEncuestadores) || totalEncuestadores <= 0) {
-    throw new Error('totalEncuestadores debe ser > 0');
+  if (!Number.isFinite(duracionCuestionarioMin) || duracionCuestionarioMin < 0) throw new Error('duracionCuestionarioMin >= 0');
+  if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) throw new Error('penetracion en (0,1]');
+  if (!Number.isFinite(totalEncuestadores) || totalEncuestadores <= 0) throw new Error('totalEncuestadores > 0');
+  if (!Number.isFinite(groupSize) || groupSize <= 0) throw new Error('groupSize > 0');
+  if (!Number.isFinite(segmentSize) || segmentSize <= 0) throw new Error('segmentSize > 0');
+  for (const [k,v] of Object.entries({filterMinutes,searchMinutes,desplazamientoMin})) {
+    if (!Number.isFinite(v as number) || (v as number) < 0) throw new Error(`${k} >= 0`);
   }
 
-  // P126 = ROUND(Q126 / groupSize, 0)
-  const p126 = Math.round(totalEncuestadores / groupSize);
+  const p126 = Math.max(1, Math.round(totalEncuestadores / groupSize)); // evita 0
 
-  // L128 = ((P123 + P121) / P122) + (P120 - P121)
-  const l128 =
-    (searchMinutes + filterMinutes) / penetracion +
-    (duracionCuestionarioMin - filterMinutes);
+  // L128 (tasa): ((P123+P121)/p) + (P120-P121)
+  const l128 = ((searchMinutes + filterMinutes) / penetracion) + (duracionCuestionarioMin - filterMinutes);
 
-  // L129 = ((P124 * L128) / P126) + P125
   const l129 = (segmentSize * l128) / p126 + desplazamientoMin;
 
-  const filas = distribucion.filas.map((fila) => {
-    const v171 = fila.tiempoEfectivoMin; // V171: minutos efectivos por día
-
-    // W171 = ROUND(V171 / L129, 0) → segmentos por día
-    const w171 = Math.round(v171 / l129);
-
-    // Y171 = (W171 * P124) / P126 → entrevistas por encuestador por día
-    const rendimiento = (w171 * segmentSize) / p126;
-
-    return {
-      ...fila,
-      rendimiento,
-    };
+  const filas = distribucion.filas.map(fila => {
+    const v171 = fila.tiempoEfectivoMin;              // V171
+    const w171 = Math.round(v171 / l129);             // W171 = ROUND(V171/L129,0)
+    const rendimiento = (w171 * segmentSize) / p126;  // Y171
+    return { ...fila, rendimiento };
   });
 
-  return {
-    ...distribucion,
-    filas,
-  };
+  return { ...distribucion, filas };
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Encuestadores y supervisores (P126, total supervisores)
@@ -895,10 +881,10 @@ export function buildDistribucionNacional(
     duracionCuestionarioMin: params.duracionCuestionarioMin,
     penetracion: params.penetracionCategoria,
     totalEncuestadores: params.encuestadoresTotales,
-    segmentSize: 8,
-    filterMinutes: 3,
-    searchMinutes: 10,
-    desplazamientoMin: 15,
+    segmentSize: 20,
+    filterMinutes: 2,
+    searchMinutes: 8,
+    desplazamientoMin: 60,
     groupSize: 4,
   });
 

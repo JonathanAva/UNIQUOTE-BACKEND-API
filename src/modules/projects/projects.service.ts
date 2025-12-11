@@ -166,53 +166,81 @@ export class ProjectsService {
    * Actualizar proyecto
    */
   async update(id: number, dto: UpdateProjectDto, userId: number) {
-    const project = await this.prisma.project.findUnique({
-      where: { id },
-      select: { id: true, createdById: true, clienteId: true },
-    });
-    if (!project) throw new NotFoundException('Proyecto no encontrado');
+  const project = await this.prisma.project.findUnique({
+    where: { id },
+    select: { id: true, createdById: true, clienteId: true },
+  });
+  if (!project) throw new NotFoundException('Proyecto no encontrado');
 
-    if (project.createdById !== userId) {
-      throw new ForbiddenException(
-        'Solo el usuario que creó el proyecto puede editarlo',
-      );
-    }
-
-    // Validación de cliente y contacto si cambian
-    if (dto.clienteId && dto.clienteId !== project.clienteId) {
-      const cliente = await this.prisma.cliente.findUnique({
-        where: { id: dto.clienteId },
-      });
-      if (!cliente) throw new NotFoundException('Cliente no encontrado');
-    }
-
-    if (dto.contactoId) {
-      const contacto = await this.prisma.contactoEmpresa.findFirst({
-        where: {
-          id: dto.contactoId,
-          clienteId: dto.clienteId ?? project.clienteId,
-        },
-      });
-      if (!contacto)
-        throw new NotFoundException(
-          'El contacto no pertenece al cliente especificado',
-        );
-    }
-
-    return this.prisma.project.update({
-      where: { id },
-      data: {
-        clienteId: dto.clienteId ?? project.clienteId,
-        contactoId: dto.contactoId ?? null,
-        name: dto.name ?? undefined,
-      },
-      select: {
-        id: true,
-        name: true,
-        updatedAt: true,
-      },
-    });
+  if (project.createdById !== userId) {
+    throw new ForbiddenException(
+      'Solo el usuario que creó el proyecto puede editarlo',
+    );
   }
+
+  // Validación de cliente y contacto si cambian
+  if (dto.clienteId && dto.clienteId !== project.clienteId) {
+    const cliente = await this.prisma.cliente.findUnique({
+      where: { id: dto.clienteId },
+    });
+    if (!cliente) throw new NotFoundException('Cliente no encontrado');
+  }
+
+  if (dto.contactoId) {
+    const contacto = await this.prisma.contactoEmpresa.findFirst({
+      where: {
+        id: dto.contactoId,
+        clienteId: dto.clienteId ?? project.clienteId,
+      },
+    });
+    if (!contacto)
+      throw new NotFoundException(
+        'El contacto no pertenece al cliente especificado',
+      );
+  }
+
+  return this.prisma.project.update({
+    where: { id },
+    data: {
+      clienteId: dto.clienteId ?? project.clienteId,
+      contactoId: dto.contactoId ?? null,
+      name: dto.name ?? undefined,
+    },
+    select: {
+      id: true,
+      name: true,
+      cliente: {
+        select: {
+          id: true,
+          empresa: true,
+          razonSocial: true,
+        },
+      },
+      contacto: {
+        select: {
+          id: true,
+          nombre: true,
+          email: true,
+        },
+      },
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          lastName: true,
+        },
+      },
+      createdAt: true,
+      updatedAt: true,
+      _count: {
+        select: {
+          cotizaciones: true,
+        },
+      },
+    },
+  });
+}
+
 
   /**
    * Eliminar proyecto
