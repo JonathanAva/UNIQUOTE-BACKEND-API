@@ -56,12 +56,41 @@ export class CotizacionesController {
     return this.service.findAllByProject(projectId);
   }
 
+  @Get('mine')
+  @ApiOperation({ summary: 'Listar mis cotizaciones (usuario autenticado)' })
+  findMine(@Req() req: Request) {
+    const user = req.user as any;
+    return this.service.findByUser(user.id);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Obtener detalles de una cotización (con items)',
   })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'Listar todas las cotizaciones (admin)' })
+  findAll() {
+    return this.service.findAll();
+  }
+
+
+
+  @Get('by-cliente/:clienteId')
+  @ApiOperation({ summary: 'Listar cotizaciones por cliente' })
+  findByCliente(@Param('clienteId', ParseIntPipe) clienteId: number) {
+    return this.service.findByCliente(clienteId);
+  }
+
+  @Get(':id/distribucion-nacional')
+  @ApiOperation({
+  summary: 'Obtener tabla de distribución nacional por departamento',
+  })
+  getDistribucionNacional(@Param('id', ParseIntPipe) id: number) {
+  return this.service.getDistribucionNacional(id);
   }
 
   @Patch(':id')
@@ -107,34 +136,6 @@ export class CotizacionesController {
     const user = req.user as any;
     return this.service.remove(id, user.id);
   }
-
-    @Get(':id/distribucion-nacional')
-    @ApiOperation({
-      summary: 'Obtener tabla de distribución nacional por departamento',
-    })
-    getDistribucionNacional(@Param('id', ParseIntPipe) id: number) {
-      return this.service.getDistribucionNacional(id);
-    }
-
-      @Get('all')
-  @ApiOperation({ summary: 'Listar todas las cotizaciones (admin)' })
-  findAll() {
-    return this.service.findAll();
-  }
-
-  @Get('mine')
-  @ApiOperation({ summary: 'Listar mis cotizaciones (usuario autenticado)' })
-  findMine(@Req() req: Request) {
-    const user = req.user as any;
-    return this.service.findByUser(user.id);
-  }
-
-  @Get('by-cliente/:clienteId')
-  @ApiOperation({ summary: 'Listar cotizaciones por cliente' })
-  findByCliente(@Param('clienteId', ParseIntPipe) clienteId: number) {
-    return this.service.findByCliente(clienteId);
-  }
-
 }
 
 
