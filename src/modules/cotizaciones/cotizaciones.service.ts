@@ -518,6 +518,7 @@ async findAll() {
       totalEntrevistas: true,
       totalCobrar: true,
       costoPorEntrevista: true,
+      metodologia: true,
       createdAt: true,
       createdBy: {
         select: { id: true, name: true, lastName: true },

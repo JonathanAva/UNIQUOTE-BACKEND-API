@@ -922,7 +922,6 @@ export function buildDistribucionNacional(
 
   distribucion = calcularTotalesViaticosTransporteHotelNacional(distribucion);
 
-  // 👇 Aquí pasamos las opciones (18/20) parametrizadas desde afuera
   distribucion = calcularPagosPersonalNacional(distribucion, pagosOpts);
 
   return distribucion;
