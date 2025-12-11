@@ -258,6 +258,12 @@ export interface DistribucionDepartamento {
   tMicrobusUnit?: number;
   hotelUnit?: number;
 
+    /**
+   * Pago por boleta que se le reconoce al encuestador en este dpto
+   * según la regla 18 / rendimiento_dpto.
+   */
+  pagoPorBoletaEncuestador?: number;
+
   /**
    * Precio de boleta para este departamento.
    * En la práctica es el mismo valor para todos los deptos,
@@ -811,28 +817,36 @@ export function calcularTotalesViaticosTransporteHotelNacional(
  */
 export function calcularPagosPersonalNacional(
   distribucion: DistribucionNacionalResult,
+  options?: {
+    pagoDiarioEncuestador?: number; // default 18 (desde Constantes)
+    tarifaSupervisorDia?: number;   // default 20 (desde Constantes)
+  },
 ): DistribucionNacionalResult {
-  const TARIFA_SUPERVISOR_DIA = 20; // 20 US$ por día de campo (constante de tu Excel)
+  const PAGO_DIARIO_ENC = options?.pagoDiarioEncuestador ?? 18;
+  const TARIFA_SUP_DIA  = options?.tarifaSupervisorDia ?? 20;
 
   let totalPagoEncuestadoresGlobal = 0;
-  let totalPagoSupervisoresGlobal = 0;
+  let totalPagoSupervisoresGlobal  = 0;
 
   const filas = distribucion.filas.map((fila) => {
-    const precioBoleta = fila.precioBoleta ?? 0;
     const totalEntrevistasDepto = fila.total ?? 0;
-    const diasCampo = fila.diasCampoEncuest ?? 0;
+    const diasCampo             = fila.diasCampoEncuest ?? 0;
 
-    // AF14 * Q14
-    const pagoEncuestadores = precioBoleta * totalEntrevistasDepto;
+    // $/boleta por dpto = 18 / rendimiento_dpto
+    const y = fila.rendimiento ?? 0;
+    const pagoPorBoletaEncuestador =
+      Number.isFinite(y) && y > 0 ? PAGO_DIARIO_ENC / y : 0;
 
-    // 20 * W14
-    const pagoSupervisores = TARIFA_SUPERVISOR_DIA * diasCampo;
+    // Totales
+    const pagoEncuestadores = pagoPorBoletaEncuestador * totalEntrevistasDepto;
+    const pagoSupervisores  = TARIFA_SUP_DIA * diasCampo;
 
     totalPagoEncuestadoresGlobal += pagoEncuestadores;
-    totalPagoSupervisoresGlobal += pagoSupervisores;
+    totalPagoSupervisoresGlobal  += pagoSupervisores;
 
     return {
       ...fila,
+      pagoPorBoletaEncuestador,
       pagoEncuestadores,
       pagoSupervisores,
     };
@@ -845,6 +859,7 @@ export function calcularPagosPersonalNacional(
     totalPagoSupervisoresGlobal,
   };
 }
+
 
 // ---------------------------------------------------------------------------
 // Build principal de distribución nacional (composición de pasos anteriores)
@@ -871,6 +886,10 @@ export interface ParamsDistribucionNacional {
 
 export function buildDistribucionNacional(
   params: ParamsDistribucionNacional,
+  pagosOpts?: {
+    pagoDiarioEncuestador?: number;
+    tarifaSupervisorDia?: number;
+  },
 ): DistribucionNacionalResult {
   let distribucion = distribuirEntrevistasNacional(
     params.totalEntrevistas,
@@ -903,9 +922,11 @@ export function buildDistribucionNacional(
 
   distribucion = calcularTotalesViaticosTransporteHotelNacional(distribucion);
 
-  distribucion = calcularPagosPersonalNacional(distribucion);
+  // 👇 Aquí pasamos las opciones (18/20) parametrizadas desde afuera
+  distribucion = calcularPagosPersonalNacional(distribucion, pagosOpts);
 
   return distribucion;
 }
+
 
 
