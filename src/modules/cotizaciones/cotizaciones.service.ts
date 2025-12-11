@@ -504,6 +504,111 @@ async remove(id: number, userId: number) {
   await this.prisma.cotizacion.delete({ where: { id } });
 
   return { message: 'Cotización eliminada correctamente' };
+  }
+
+  // Todas las cotizaciones
+async findAll() {
+  return this.prisma.cotizacion.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      totalEntrevistas: true,
+      totalCobrar: true,
+      costoPorEntrevista: true,
+      createdAt: true,
+      createdBy: {
+        select: { id: true, name: true, lastName: true },
+      },
+      contacto: {
+        select: { id: true, nombre: true, email: true },
+      },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          cliente: {
+            select: {
+              id: true,
+              empresa: true,
+              razonSocial: true,
+            },
+          },
+        },
+      },
+    },
+  });
 }
+
+// Cotizaciones creadas por un usuario
+async findByUser(userId: number) {
+  return this.prisma.cotizacion.findMany({
+    where: { createdById: userId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      totalEntrevistas: true,
+      totalCobrar: true,
+      costoPorEntrevista: true,
+      createdAt: true,
+      contacto: {
+        select: { id: true, nombre: true, email: true },
+      },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          cliente: {
+            select: {
+              id: true,
+              empresa: true,
+              razonSocial: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+// Cotizaciones por cliente
+async findByCliente(clienteId: number) {
+  return this.prisma.cotizacion.findMany({
+    where: {
+      project: {
+        clienteId,
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      totalEntrevistas: true,
+      totalCobrar: true,
+      costoPorEntrevista: true,
+      createdAt: true,
+      createdBy: {
+        select: { id: true, name: true, lastName: true },
+      },
+      contacto: {
+        select: { id: true, nombre: true, email: true },
+      },
+      project: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+}
+
 
 }

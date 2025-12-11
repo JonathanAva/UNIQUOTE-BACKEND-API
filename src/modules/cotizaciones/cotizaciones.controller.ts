@@ -116,6 +116,24 @@ export class CotizacionesController {
       return this.service.getDistribucionNacional(id);
     }
 
+      @Get('all')
+  @ApiOperation({ summary: 'Listar todas las cotizaciones (admin)' })
+  findAll() {
+    return this.service.findAll();
+  }
+
+  @Get('mine')
+  @ApiOperation({ summary: 'Listar mis cotizaciones (usuario autenticado)' })
+  findMine(@Req() req: Request) {
+    const user = req.user as any;
+    return this.service.findByUser(user.id);
+  }
+
+  @Get('by-cliente/:clienteId')
+  @ApiOperation({ summary: 'Listar cotizaciones por cliente' })
+  findByCliente(@Param('clienteId', ParseIntPipe) clienteId: number) {
+    return this.service.findByCliente(clienteId);
+  }
 
 }
 
