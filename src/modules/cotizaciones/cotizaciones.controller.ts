@@ -72,7 +72,7 @@ export class CotizacionesController {
   }
 
   @Get('all')
-  @ApiOperation({ summary: 'Listar todas las cotizaciones (admin)' })
+  @ApiOperation({ summary: 'Listar todas las cotizaciones ' })
   findAll() {
     return this.service.findAll();
   }
