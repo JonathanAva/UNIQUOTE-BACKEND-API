@@ -93,6 +93,31 @@ export class CotizacionesController {
   return this.service.getDistribucionNacional(id);
   }
 
+  @Get('stats/total')
+  @ApiOperation({ summary: 'Total de cotizaciones registradas' })
+  getTotalCotizaciones() {
+    return this.service.countAll();
+  }
+
+  @Get('stats/pendientes')
+  @ApiOperation({ summary: 'Total de cotizaciones en estado ENVIADO (pendientes)' })
+  getTotalPendientes() {
+  return this.service.countByStatus('ENVIADO');
+  }
+
+  @Get('stats/aprobadas')
+  @ApiOperation({ summary: 'Total de cotizaciones aprobadas' })
+  getTotalAprobadas() {
+  return this.service.countByStatus('APROBADO');
+  }
+
+  @Get('stats/no-aprobadas')
+  @ApiOperation({ summary: 'Total de cotizaciones no aprobadas' })
+  getTotalNoAprobadas() {
+  return this.service.countByStatus('NO_APROBADO');
+  }
+
+
   @Patch(':id')
   @ApiOperation({
     summary:

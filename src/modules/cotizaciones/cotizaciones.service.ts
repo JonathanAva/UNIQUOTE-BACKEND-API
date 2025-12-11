@@ -610,5 +610,17 @@ async findByCliente(clienteId: number) {
   });
 }
 
+async countAll() {
+  const total = await this.prisma.cotizacion.count();
+  return { total };
+}
+
+async countByStatus(status: CotizacionStatus | string) {
+  const total = await this.prisma.cotizacion.count({
+    where: { status: status as CotizacionStatus },
+  });
+  return { status, total };
+}
+
 
 }
