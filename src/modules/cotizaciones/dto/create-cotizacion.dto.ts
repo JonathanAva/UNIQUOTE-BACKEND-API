@@ -131,9 +131,8 @@ export class CreateCotizacionDto {
   tipoEntrevista: string;
 
   @ApiProperty({ example: 100, description: 'Penetración de la categoría en porcentaje' })
-  @IsInt()
-  @Min(1)
-  @Max(100)
+  @Min(0.01)
+  @Max(1)
   penetracionCategoria: string | number;
 
   @ApiProperty({ example: 'Nacional', description: 'Cobertura del estudio' })
