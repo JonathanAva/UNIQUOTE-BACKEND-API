@@ -926,6 +926,3 @@ export function buildDistribucionNacional(
 
   return distribucion;
 }
-
-
-

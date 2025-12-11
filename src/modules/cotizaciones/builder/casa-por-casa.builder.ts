@@ -1,13 +1,19 @@
 // ===========================================================================
 // BUILDER PRINCIPAL: CASA POR CASA (NACIONAL)
 // Calcula bloques de costos usando constantes y el motor nacional.engine.ts
-// ===========================================================================
+//
+// ✅ Cambios clave frente a tu versión anterior:
+//  1) Se cargan las CONSTANTES desde DB y se pasan a Recursos y Dirección.
+//  2) Se inserta el ítem **Días director** antes de “Realización Cuestionario”.
+//  3) Se mantiene el uso de los **días del engine (W14 TOTAL)** para todos
+//     los ítems que dependen de días (coincidiendo con el Excel).
 
 import { ConstantesService } from '@/modules/constantes/constantes.service';
 
 import {
   buildTrabajoCampoCasaPorCasaNacional,
   buildRecursosCasaPorCasaNacional,
+  buildDiasDirector,                 
   buildRealizacionCuestionario,
   buildSupervisorScript,
   buildReporteResultados,
@@ -30,7 +36,7 @@ export interface CasaPorCasaNacionalBuilderParams {
   totalEntrevistas: number;
   duracionCuestionarioMin: number;
   tipoEntrevista: string;
-  penetracionCategoria: number | string; // ✅ Acepta número o string
+  penetracionCategoria: number | string; // Acepta número o string (%, fácil/medio/difícil)
   cobertura: string;
   supervisores: number;
   encuestadoresTotales: number;
@@ -43,8 +49,8 @@ export interface CasaPorCasaNacionalBuilderParams {
   trabajoDeCampoTipo?: 'propio' | 'subcontratado';
   trabajoDeCampoCosto?: number;
   incentivoTotal?: number;
-  factorComisionable?: number;
-  factorNoComisionable?: number;
+  factorComisionable?: number;     // p.ej. 1 = 100%
+  factorNoComisionable?: number;   // p.ej. 0.05 = 5%
 }
 
 export interface CotizacionItemBuild {
@@ -60,7 +66,7 @@ export interface CotizacionItemBuild {
 }
 
 // ---------------------------------------------------------------------------
-// FUNCIÓN PRINCIPAL
+// FUNCIÓN PRINCIPAL (COMPLETA)
 // ---------------------------------------------------------------------------
 
 export async function buildCotizacionCasaPorCasa(
@@ -75,7 +81,7 @@ export async function buildCotizacionCasaPorCasa(
   const factorNoComisionable = params.factorNoComisionable ?? 0.05;
 
   // -------------------------------------------------------------------------
-  // 1. Convertir penetración a número si es necesario
+  // 1) Normalizar penetración (acepta número / %, fácil/medio/difícil)
   // -------------------------------------------------------------------------
   let penetracion: number;
 
@@ -89,6 +95,7 @@ export async function buildCotizacionCasaPorCasa(
     } else if (raw === 'dificil' || raw === 'difícil') {
       penetracion = 0.35;
     } else if (raw.endsWith('%')) {
+      // soporta "60%" etc.
       penetracion = parseFloat(raw.replace('%', '')) / 100;
     } else {
       penetracion = parseFloat(raw);
@@ -96,7 +103,7 @@ export async function buildCotizacionCasaPorCasa(
 
     if (isNaN(penetracion) || penetracion <= 0 || penetracion > 1) {
       throw new Error(
-        `penetracionCategoria inválida: "${params.penetracionCategoria}", debe ser número entre 0 y 1, o una etiqueta válida (fácil, medio, difícil)`,
+        `penetracionCategoria inválida: "${params.penetracionCategoria}", debe ser número entre 0 y 1, o una etiqueta válida (fácil, medio, difícil, %).`,
       );
     }
   } else {
@@ -104,12 +111,12 @@ export async function buildCotizacionCasaPorCasa(
   }
 
   // -------------------------------------------------------------------------
-  // 2. Obtener constantes desde DB
+  // 2) Cargar CONSTANTES desde DB (clave: "Categoría.Subcategoría")
   // -------------------------------------------------------------------------
   const constantes = await constantesService.getAllAsKeyValue();
 
   // -------------------------------------------------------------------------
-  // 3. Calcular distribución (solo si TC es propio)
+  // 3) Distribución (si TC propio) -> de aquí salen los días (W14 TOTAL)
   // -------------------------------------------------------------------------
   let distribucion: DistribucionNacionalResult | null = null;
 
@@ -134,11 +141,11 @@ export async function buildCotizacionCasaPorCasa(
   }
 
   // -------------------------------------------------------------------------
-  // 4. Construir bloques
+  // 4) Construir BLOQUES
   // -------------------------------------------------------------------------
   const items: CotizacionItemBuild[] = [];
 
-  // ---- Trabajo de campo ----------------------------------------------------
+  // ---- TRABAJO DE CAMPO ----------------------------------------------------
   if (params.trabajoDeCampoRealiza) {
     if (params.trabajoDeCampoTipo === 'propio' && distribucion) {
       const campo = await buildTrabajoCampoCasaPorCasaNacional(
@@ -149,7 +156,7 @@ export async function buildCotizacionCasaPorCasa(
           factorNoComisionable,
           distribucion,
         },
-        constantes,
+        constantes, // ← pasa constantes (si en bloques se usan)
       );
       items.push(...campo);
     } else {
@@ -170,7 +177,8 @@ export async function buildCotizacionCasaPorCasa(
     }
   }
 
-  // ---- Recursos ------------------------------------------------------------
+  // ---- RECURSOS ------------------------------------------------------------
+  // Usa SIEMPRE los días del engine (W14 TOTAL) y los unitarios desde DB
   items.push(
     ...buildRecursosCasaPorCasaNacional(
       {
@@ -179,56 +187,71 @@ export async function buildCotizacionCasaPorCasa(
         factorComisionable,
         factorNoComisionable,
         incentivoTotal: params.incentivoTotal,
+        distribucion: distribucion!, // usa días del engine (W14)
       },
-      constantes,
+      constantes, // ← unitarios desde DB (p.ej. 0.60, 0.36, 3.00, 5.00, etc.)
     ),
   );
 
-  // ---- Dirección -----------------------------------------------------------
+  // ---- DIRECCIÓN -----------------------------------------------------------
+  // ➕ Días director (según  Excel: 32 días). Se obtiene el unitario de DB
+  //    con la clave "Dirección.Días director" y se aplica comisión.
+    items.push(
+      buildDiasDirector(
+        { factorComisionable, factorNoComisionable, distribucion: distribucion! },
+        constantes,
+      ),
+    );
+
+
   if (params.realizamosCuestionario) {
     items.push(
-      buildRealizacionCuestionario({
-        factorComisionable,
-        factorNoComisionable,
-      }),
+      buildRealizacionCuestionario(
+        { factorComisionable, factorNoComisionable },
+        constantes, // ← “Dirección.Realización Cuestionario”
+      ),
     );
   }
 
   if (params.realizamosScript) {
     items.push(
-      buildSupervisorScript({
-        factorComisionable,
-        factorNoComisionable,
-      }),
+      buildSupervisorScript(
+        { factorComisionable, factorNoComisionable },
+        constantes, // ← “Dirección.Supervisor”
+      ),
     );
   }
 
   if (params.clienteSolicitaReporte) {
     items.push(
-      buildReporteResultados({
-        factorComisionable,
-        factorNoComisionable,
-      }),
+      buildReporteResultados(
+        { factorComisionable, factorNoComisionable },
+        constantes, // ← “Dirección.Reporte de Resultados”
+      ),
     );
   }
 
   if (params.clienteSolicitaInformeBI) {
     items.push(
-      buildInformeBi({
-        numeroOlasBi: params.numeroOlasBi,
-        factorComisionable,
-        factorNoComisionable,
-      }),
+      buildInformeBi(
+        {
+          numeroOlasBi: params.numeroOlasBi,
+          factorComisionable,
+          factorNoComisionable,
+        },
+        constantes, // ← “Dirección.Informe BI” (si lo usas como unitario/validación)
+      ),
     );
   }
 
-  // ---- Procesamiento -------------------------------------------------------
+  // ---- PROCESAMIENTO -------------------------------------------------------
+  // (Estas funciones ya consideran comisión internamente según tu bloques.ts)
   items.push(buildCodificacionProcesamiento({ factorComisionable, factorNoComisionable }));
   items.push(buildControlCalidadProcesamiento({ factorComisionable, factorNoComisionable }));
   items.push(buildBaseLimpiezaProcesamiento({ factorComisionable, factorNoComisionable }));
 
   // -------------------------------------------------------------------------
-  // 5. Totales finales
+  // 5) TOTALES FINALES
   // -------------------------------------------------------------------------
   const totalCobrar = Math.round(
     items.reduce((sum, i) => sum + (i.totalConComision ?? 0), 0) * 100,
