@@ -204,45 +204,61 @@ export async function buildCotizacionCasaPorCasa(
     );
 
 
-  if (params.realizamosCuestionario) {
-    items.push(
-      buildRealizacionCuestionario(
-        { factorComisionable, factorNoComisionable },
-        constantes, // ← “Dirección.Realización Cuestionario”
-      ),
-    );
-  }
+if (params.realizamosCuestionario) {
+  items.push(
+    buildRealizacionCuestionario(
+      {
+        factorComisionable,
+        factorNoComisionable,
+        duracionCuestionarioMin: params.duracionCuestionarioMin, // 👈
+      },
+      constantes,
+    ),
+  );
+}
 
-  if (params.realizamosScript) {
-    items.push(
-      buildSupervisorScript(
-        { factorComisionable, factorNoComisionable },
-        constantes, // ← “Dirección.Supervisor”
-      ),
-    );
-  }
 
-  if (params.clienteSolicitaReporte) {
-    items.push(
-      buildReporteResultados(
-        { factorComisionable, factorNoComisionable },
-        constantes, // ← “Dirección.Reporte de Resultados”
-      ),
-    );
-  }
 
-  if (params.clienteSolicitaInformeBI) {
-    items.push(
-      buildInformeBi(
-        {
-          numeroOlasBi: params.numeroOlasBi,
-          factorComisionable,
-          factorNoComisionable,
-        },
-        constantes, // ← “Dirección.Informe BI” (si lo usas como unitario/validación)
-      ),
-    );
-  }
+if (params.realizamosScript) {
+  items.push(
+    buildSupervisorScript(
+      {
+        factorComisionable,
+        factorNoComisionable,
+        duracionCuestionarioMin: params.duracionCuestionarioMin, // 👈
+      },
+      constantes,
+    ),
+  );
+}
+
+
+
+if (params.clienteSolicitaReporte) {
+  items.push(
+    buildReporteResultados(
+      { factorComisionable, factorNoComisionable },
+      constantes,
+      { duracionCuestionarioMin: params.duracionCuestionarioMin }, // ← pasa la duración
+    ),
+  );
+}
+
+
+if (params.clienteSolicitaInformeBI) {
+  items.push(
+    buildInformeBi(
+      {
+        numeroOlasBi: params.numeroOlasBi,
+        factorComisionable,
+        factorNoComisionable,
+        duracionCuestionarioMin: params.duracionCuestionarioMin, 
+      },
+      constantes,
+    ),
+  );
+}
+
 
   // ---- PROCESAMIENTO -------------------------------------------------------
   // (Estas funciones ya consideran comisión internamente según tu bloques.ts)
