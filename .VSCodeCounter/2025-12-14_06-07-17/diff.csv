@@ -1,0 +1,13 @@
+"filename", "language", "TypeScript", "MS SQL", "comment", "blank", "total"
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251214111939_add_cliente_solicita_tablas\migration.sql", "MS SQL", 0, 1, 1, 1, 3
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\auth.controller.ts", "TypeScript", 10, 0, 1, 1, 12
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\auth.service.ts", "TypeScript", 41, 0, 11, 9, 61
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\dto\set-initial-password.dto.ts", "TypeScript", 14, 0, 0, 3, 17
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\bloques.ts", "TypeScript", 117, 0, 54, 39, 210
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\casa-por-casa.builder.ts", "TypeScript", 30, 0, -15, -2, 13
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\cotizaciones.controller.ts", "TypeScript", 12, 0, 0, 0, 12
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\cotizaciones.service.ts", "TypeScript", 143, 0, 37, 21, 201
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\create-cotizacion.dto.ts", "TypeScript", 8, 0, 0, 1, 9
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\update-cotizacion-item.dto.ts", "TypeScript", 22, 0, 1, 7, 30
+"c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\seeds\seed-constantes.ts", "TypeScript", 1, 0, 0, 0, 1
+"Total", "-", 398, 1, 90, 80, 569

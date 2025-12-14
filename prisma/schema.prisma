@@ -42,18 +42,18 @@ model Role {
 // MODELO: User
 // =====================================================
 model User {
-  id                Int       @id @default(autoincrement())
-  name              String
-  lastName          String
-  email             String    @unique
-  phone             String
-  password          String
+  id       Int    @id @default(autoincrement())
+  name     String
+  lastName String
+  email    String @unique
+  phone    String
+  password String
 
-  roleId            Int
-  role              Role      @relation(fields: [roleId], references: [id])
+  roleId Int
+  role   Role @relation(fields: [roleId], references: [id])
 
-  mustChangePassword    Boolean   @default(false) // ← obliga cambio
-  passwordChangedAt     DateTime? 
+  mustChangePassword Boolean   @default(false) // ← obliga cambio
+  passwordChangedAt  DateTime?
 
   mfaLastVerifiedAt DateTime?
 
@@ -91,9 +91,9 @@ model ContactoEmpresa {
   clienteId Int
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
-  nombre    String
-  email     String   @unique
-  telefono  String
+  nombre   String
+  email    String @unique
+  telefono String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -152,7 +152,7 @@ model Project {
 
   name        String
   createdById Int
-  createdBy   User @relation(fields: [createdById], references: [id])
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
   cotizaciones Cotizacion[]
 
@@ -171,36 +171,36 @@ model Project {
 /// - trabajoDeCampoTipo ("propio" | "subcontratado")
 /// - trabajoDeCampoCosto (monto si es subcontratado)
 model Cotizacion {
-  id                      Int              @id @default(autoincrement())
-  name                    String
-  code                    String           @unique
-  status                  CotizacionStatus @default(ENVIADO)
+  id     Int              @id @default(autoincrement())
+  name   String
+  code   String           @unique
+  status CotizacionStatus @default(ENVIADO)
 
   // Tipo de estudio
-  studyType               String
-  metodologia             String?
+  studyType   String
+  metodologia String?
 
   // NUEVOS CAMPOS CORRECTOS
-  trabajoDeCampoRealiza   Boolean
-  trabajoDeCampoTipo      String?      // 'propio' | 'subcontratado'
-  trabajoDeCampoCosto     Float?       // monto si es subcontratado
+  trabajoDeCampoRealiza Boolean
+  trabajoDeCampoTipo    String? // 'propio' | 'subcontratado'
+  trabajoDeCampoCosto   Float? // monto si es subcontratado
 
-  numeroOlasBi            Int?
+  numeroOlasBi Int?
 
   // Datos técnicos
-  totalEntrevistas        Int
-  duracionCuestionarioMin Int
-  tipoEntrevista          String
-  penetracionCategoria    Int
-  cobertura               String
-  supervisores            Int
-  encuestadoresTotales    Int
-  realizamosCuestionario  Boolean
-  realizamosScript        Boolean
-  clienteSolicitaReporte  Boolean
+  totalEntrevistas         Int
+  duracionCuestionarioMin  Int
+  tipoEntrevista           String
+  penetracionCategoria     Int
+  cobertura                String
+  supervisores             Int
+  encuestadoresTotales     Int
+  realizamosCuestionario   Boolean
+  realizamosScript         Boolean
+  clienteSolicitaReporte   Boolean
   clienteSolicitaInformeBI Boolean
-  clienteSolicitaTablas   Boolean?  // opcional; default null/false si prefieres
-  incentivoTotal          Int?
+  clienteSolicitaTablas    Boolean? // opcional; default null/false si prefieres
+  incentivoTotal           Int?
 
   // Totales
   factorComisionablePct   Float?
@@ -218,7 +218,9 @@ model Cotizacion {
   createdBy   User @relation(fields: [createdById], references: [id])
   createdById Int
 
-  items CotizacionItem[]
+  items                 CotizacionItem[]
+  // ←← Campo inverso nuevo para overrides de distribución
+  distribucionOverrides CotizacionDistribucionOverride[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -258,24 +260,57 @@ model CotizacionItem {
 /// - categoría: "Trabajo de Campo", subcategoría: "Viático - San Miguel"
 /// - categoría: "Procesamiento", subcategoría: "Codificación"
 model Constante {
-  id           Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   /// Categoría general (ej. Trabajo de Campo, Recursos, Dirección, Procesamiento)
-  categoria    String
+  categoria String
 
   /// Subcategoría específica (ej. Viático - San Miguel, Pago Encuestador Diario)
   subcategoria String
 
   /// Valor numérico editable
-  valor        Float
+  valor Float
 
   /// Unidad opcional (ej. "$", "por hora", "USD", etc.)
-  unidad       String?
+  unidad String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   /// Cada combinación categoría + subcategoría debe ser única
   @@unique([categoria, subcategoria])
   @@index([categoria])
+}
+
+// =====================================================
+// MODELO: CotizacionDistribucionOverride
+// =====================================================
+// prisma/schema.prisma
+model CotizacionDistribucionOverride {
+  id           Int    @id @default(autoincrement())
+  cotizacionId Int
+  departamento String // usa los mismos nombres que DepartamentoNacional
+
+  // Campos override (todos opcionales)
+  urbano            Int?
+  rural             Int?
+  total             Int?
+  horasEfectivas    Int?
+  tiempoEfectivoMin Int?
+  rendimiento       Float?
+  encuestadores     Int?
+  supervisores      Int?
+  diasCampoEncuest  Float?
+  viaticosUnit      Float?
+  tMicrobusUnit     Float?
+  hotelUnit         Float?
+  precioBoleta      Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cotizacion Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+
+  @@unique([cotizacionId, departamento])
+  @@map("cotizacion_distrib_overrides")
 }

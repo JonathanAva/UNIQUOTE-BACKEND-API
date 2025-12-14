@@ -1,0 +1,198 @@
+Date : 2025-12-14 06:08:02
+Directory : c:\Users\hpalv\OneDrive\Documentos\uniquote-api
+Total : 108 files,  23183 codes, 858 comments, 982 blanks, all 25023 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| JSON               |          6 |     17,932 |          0 |          6 |     17,938 |
+| TypeScript         |         85 |      4,791 |        753 |        812 |      6,356 |
+| MS SQL             |         13 |        192 |        104 |         71 |        367 |
+| Markdown           |          1 |        186 |          0 |         88 |        274 |
+| JavaScript         |          1 |         33 |          1 |          2 |         36 |
+| JSON with Comments |          1 |         32 |          0 |          1 |         33 |
+| YAML               |          1 |         17 |          0 |          2 |         19 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                                  | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                                     |        108 |     23,183 |        858 |        982 |     25,023 |
+| . (Files)                                                                                                                             |         10 |     18,197 |          1 |        100 |     18,298 |
+| prisma                                                                                                                                |         13 |        192 |        104 |         71 |        367 |
+| prisma\migrations                                                                                                                     |         13 |        192 |        104 |         71 |        367 |
+| prisma\migrations\20251106165250_init                                                                                                 |          1 |         36 |          9 |         12 |         57 |
+| prisma\migrations\20251106201015_mfa_email_otp                                                                                        |          1 |         12 |          5 |          6 |         23 |
+| prisma\migrations\20251107151149_split_cliente_contacto                                                                               |          1 |         17 |         14 |          7 |         38 |
+| prisma\migrations\20251113061745_add_trusted_device_inverse                                                                           |          1 |         14 |          5 |          6 |         25 |
+| prisma\migrations\20251113081829_add_projects_and_cotizaciones                                                                        |          1 |         66 |         15 |         18 |         99 |
+| prisma\migrations\20251127210314_add_cotizacion_relaciones_y_estados                                                                  |          1 |          8 |         12 |          5 |         25 |
+| prisma\migrations\20251127213700_add_indexes_cotizacion                                                                               |          1 |          1 |          1 |          1 |          3 |
+| prisma\migrations\20251203101834_add_cotizacion_items                                                                                 |          1 |         16 |         20 |          6 |         42 |
+| prisma\migrations\20251203110339_remove_project_type_and_study_type                                                                   |          1 |          3 |          9 |          2 |         14 |
+| prisma\migrations\20251204175327_enable_cascade_delete_cotizacion_items                                                               |          1 |          2 |          2 |          2 |          6 |
+| prisma\migrations\20251210042241_add_trabajo_de_campo_fields                                                                          |          1 |          4 |          8 |          1 |         13 |
+| prisma\migrations\20251210071348_add_constantes_model                                                                                 |          1 |         12 |          3 |          4 |         19 |
+| prisma\migrations\20251214111939_add_cliente_solicita_tablas                                                                          |          1 |          1 |          1 |          1 |          3 |
+| src                                                                                                                                   |         83 |      4,764 |        753 |        805 |      6,322 |
+| src (Files)                                                                                                                           |          5 |        114 |         17 |         25 |        156 |
+| src\config                                                                                                                            |          3 |         41 |         10 |         10 |         61 |
+| src\infra                                                                                                                             |          1 |         13 |          4 |          3 |         20 |
+| src\infra\database                                                                                                                    |          1 |         13 |          4 |          3 |         20 |
+| src\modules                                                                                                                           |         70 |      4,435 |        693 |        739 |      5,867 |
+| src\modules\auth                                                                                                                      |         13 |        454 |         95 |         86 |        635 |
+| src\modules\auth (Files)                                                                                                              |          3 |        319 |         72 |         52 |        443 |
+| src\modules\auth\decorators                                                                                                           |          2 |          5 |          5 |          5 |         15 |
+| src\modules\auth\dto                                                                                                                  |          4 |         55 |          4 |         11 |         70 |
+| src\modules\auth\guards                                                                                                               |          3 |         38 |          9 |         14 |         61 |
+| src\modules\auth\strategies                                                                                                           |          1 |         37 |          5 |          4 |         46 |
+| src\modules\clients                                                                                                                   |          5 |        204 |          6 |         28 |        238 |
+| src\modules\clients (Files)                                                                                                           |          3 |        189 |          4 |         23 |        216 |
+| src\modules\clients\dto                                                                                                               |          2 |         15 |          2 |          5 |         22 |
+| src\modules\constantes                                                                                                                |          5 |        252 |          0 |         51 |        303 |
+| src\modules\constantes (Files)                                                                                                        |          3 |        188 |          0 |         41 |        229 |
+| src\modules\constantes\dto                                                                                                            |          2 |         64 |          0 |         10 |         74 |
+| src\modules\contactos                                                                                                                 |          5 |        224 |         15 |         30 |        269 |
+| src\modules\contactos (Files)                                                                                                         |          3 |        203 |         13 |         23 |        239 |
+| src\modules\contactos\dto                                                                                                             |          2 |         21 |          2 |          7 |         30 |
+| src\modules\cotizaciones                                                                                                              |         22 |      2,600 |        532 |        439 |      3,571 |
+| src\modules\cotizaciones (Files)                                                                                                      |          3 |        822 |         70 |        128 |      1,020 |
+| src\modules\cotizaciones\builder                                                                                                      |          7 |      1,034 |        160 |        148 |      1,342 |
+| src\modules\cotizaciones\constants                                                                                                    |          2 |         12 |          4 |          4 |         20 |
+| src\modules\cotizaciones\dto                                                                                                          |          5 |        195 |         24 |         38 |        257 |
+| src\modules\cotizaciones\engine                                                                                                       |          5 |        537 |        274 |        121 |        932 |
+| src\modules\cotizaciones\engine\casa-por-casa                                                                                         |          4 |        537 |        274 |        120 |        931 |
+| src\modules\cotizaciones\engine\telefonico                                                                                            |          1 |          0 |          0 |          1 |          1 |
+| src\modules\projects                                                                                                                  |          6 |        369 |         23 |         41 |        433 |
+| src\modules\projects (Files)                                                                                                          |          3 |        317 |         20 |         34 |        371 |
+| src\modules\projects\dto                                                                                                              |          3 |         52 |          3 |          7 |         62 |
+| src\modules\roles                                                                                                                     |          6 |         81 |          6 |         21 |        108 |
+| src\modules\roles (Files)                                                                                                             |          3 |         70 |          4 |         16 |         90 |
+| src\modules\roles\dto                                                                                                                 |          2 |         11 |          2 |          4 |         17 |
+| src\modules\roles\entities                                                                                                            |          1 |          0 |          0 |          1 |          1 |
+| src\modules\users                                                                                                                     |          8 |        251 |         16 |         43 |        310 |
+| src\modules\users (Files)                                                                                                             |          5 |        190 |         13 |         33 |        236 |
+| src\modules\users\dto                                                                                                                 |          2 |         48 |          2 |          9 |         59 |
+| src\modules\users\entities                                                                                                            |          1 |         13 |          1 |          1 |         15 |
+| src\seeds                                                                                                                             |          2 |         99 |         18 |         18 |        135 |
+| src\shared                                                                                                                            |          2 |         62 |         11 |         10 |         83 |
+| src\shared\mailer                                                                                                                     |          2 |         62 |         11 |         10 |         83 |
+| test                                                                                                                                  |          2 |         30 |          0 |          6 |         36 |
++---------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                                              | language           | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\.prettierrc                                                                           | JSON               |          4 |          0 |          1 |          5 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\README.md                                                                             | Markdown           |        186 |          0 |         88 |        274 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\docker-compose.yml                                                                    | YAML               |         17 |          0 |          2 |         19 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\eslint.config.mjs                                                                     | JavaScript         |         33 |          1 |          2 |         36 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\nest-cli.json                                                                         | JSON               |          8 |          0 |          1 |          9 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\package-lock.json                                                                     | JSON               |     17,812 |          0 |          1 |     17,813 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\package.json                                                                          | JSON               |         95 |          0 |          1 |         96 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma.config.ts                                                                      | TypeScript         |          6 |          0 |          2 |          8 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251106165250_init\migration.sql                                   | MS SQL             |         36 |          9 |         12 |         57 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251106201015_mfa_email_otp\migration.sql                          | MS SQL             |         12 |          5 |          6 |         23 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251107151149_split_cliente_contacto\migration.sql                 | MS SQL             |         17 |         14 |          7 |         38 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251113061745_add_trusted_device_inverse\migration.sql             | MS SQL             |         14 |          5 |          6 |         25 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251113081829_add_projects_and_cotizaciones\migration.sql          | MS SQL             |         66 |         15 |         18 |         99 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251127210314_add_cotizacion_relaciones_y_estados\migration.sql    | MS SQL             |          8 |         12 |          5 |         25 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251127213700_add_indexes_cotizacion\migration.sql                 | MS SQL             |          1 |          1 |          1 |          3 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251203101834_add_cotizacion_items\migration.sql                   | MS SQL             |         16 |         20 |          6 |         42 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251203110339_remove_project_type_and_study_type\migration.sql     | MS SQL             |          3 |          9 |          2 |         14 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251204175327_enable_cascade_delete_cotizacion_items\migration.sql | MS SQL             |          2 |          2 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251210042241_add_trabajo_de_campo_fields\migration.sql            | MS SQL             |          4 |          8 |          1 |         13 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251210071348_add_constantes_model\migration.sql                   | MS SQL             |         12 |          3 |          4 |         19 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\prisma\migrations\20251214111939_add_cliente_solicita_tablas\migration.sql            | MS SQL             |          1 |          1 |          1 |          3 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\app.controller.spec.ts                                                            | TypeScript         |         18 |          1 |          5 |         24 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\app.controller.ts                                                                 | TypeScript         |         10 |          2 |          3 |         15 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\app.module.ts                                                                     | TypeScript         |         43 |          5 |          5 |         53 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\app.service.ts                                                                    | TypeScript         |          7 |          1 |          2 |         10 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\config\configuration.ts                                                           | TypeScript         |         14 |          6 |          3 |         23 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\config\swagger.config.ts                                                          | TypeScript         |         16 |          2 |          2 |         20 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\config\validation.ts                                                              | TypeScript         |         11 |          2 |          5 |         18 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\infra\database\prisma.service.ts                                                  | TypeScript         |         13 |          4 |          3 |         20 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\main.ts                                                                           | TypeScript         |         36 |          8 |         10 |         54 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\auth.controller.ts                                                   | TypeScript         |         74 |          9 |          7 |         90 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\auth.module.ts                                                       | TypeScript         |         28 |          3 |          2 |         33 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\auth.service.ts                                                      | TypeScript         |        217 |         60 |         43 |        320 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\decorators\role-ids.decorator.ts                                     | TypeScript         |          2 |          2 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\decorators\roles.decorator.ts                                        | TypeScript         |          3 |          3 |          3 |          9 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\dto\login.dto.ts                                                     | TypeScript         |         11 |          2 |          3 |         16 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\dto\set-initial-password.dto.ts                                      | TypeScript         |         14 |          0 |          3 |         17 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\dto\verify-email-code-request.dto.ts                                 | TypeScript         |         13 |          1 |          2 |         16 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\dto\verify-email-code.dto.ts                                         | TypeScript         |         17 |          1 |          3 |         21 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\guards\jwt-auth.guard.ts                                             | TypeScript         |          4 |          1 |          2 |          7 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\guards\role-ids.guard.ts                                             | TypeScript         |         17 |          6 |          7 |         30 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\guards\roles.guard.ts                                                | TypeScript         |         17 |          2 |          5 |         24 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\auth\strategies\jwt.strategy.ts                                           | TypeScript         |         37 |          5 |          4 |         46 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\clients\clientes.controller.ts                                            | TypeScript         |         51 |          2 |          7 |         60 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\clients\clientes.module.ts                                                | TypeScript         |         11 |          1 |          2 |         14 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\clients\clientes.service.ts                                               | TypeScript         |        127 |          1 |         14 |        142 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\clients\dto\create-cliente.dto.ts                                         | TypeScript         |         12 |          1 |          3 |         16 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\clients\dto\update-cliente.dto.ts                                         | TypeScript         |          3 |          1 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\constantes\constantes.controller.ts                                       | TypeScript         |         74 |          0 |         12 |         86 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\constantes\constantes.module.ts                                           | TypeScript         |         10 |          0 |          2 |         12 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\constantes\constantes.service.ts                                          | TypeScript         |        104 |          0 |         27 |        131 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\constantes\dto\create-constante.dto.ts                                    | TypeScript         |         30 |          0 |          5 |         35 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\constantes\dto\update-constante.dto.ts                                    | TypeScript         |         34 |          0 |          5 |         39 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\contactos\contactos.controller.ts                                         | TypeScript         |         53 |          2 |          7 |         62 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\contactos\contactos.module.ts                                             | TypeScript         |         10 |          1 |          2 |         13 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\contactos\contactos.service.ts                                            | TypeScript         |        140 |         10 |         14 |        164 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\contactos\dto\create-contacto.dto.ts                                      | TypeScript         |         18 |          1 |          5 |         24 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\contactos\dto\update-contacto.dto.ts                                      | TypeScript         |          3 |          1 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\bloques.ts                                           | TypeScript         |        802 |        136 |        115 |      1,053 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\casa-por-casa.builder.ts                             | TypeScript         |        232 |         24 |         28 |        284 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\centro-comercial.builder.ts                          | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\mystery-shopper.builder.ts                           | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\online.builder.ts                                    | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\punto-de-alfuencia.builder.ts                        | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\builder\telefonico.builder.ts                                | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\constants\metodologia.enum.ts                                | TypeScript         |          8 |          2 |          2 |         12 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\constants\study-type.enum.ts                                 | TypeScript         |          4 |          2 |          2 |          8 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\cotizaciones.controller.ts                                   | TypeScript         |        148 |          0 |         28 |        176 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\cotizaciones.module.ts                                       | TypeScript         |         13 |          0 |          2 |         15 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\cotizaciones.service.ts                                      | TypeScript         |        661 |         70 |         98 |        829 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\cotizacion-item.dto.ts                                   | TypeScript         |         12 |          0 |          1 |         13 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\create-cotizacion.dto.ts                                 | TypeScript         |        146 |         13 |         26 |        185 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\update-cotizacion-item.dto.ts                            | TypeScript         |         22 |          1 |          7 |         30 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\update-cotizacion-status.dto.ts                          | TypeScript         |         12 |          1 |          2 |         15 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\dto\update-cotizacion.dto.ts                                 | TypeScript         |          3 |          9 |          2 |         14 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\engine\casa-por-casa\amss.engine.ts                          | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\engine\casa-por-casa\nacional.engine.ts                      | TypeScript         |        537 |        274 |        117 |        928 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\engine\casa-por-casa\unimer.engine.ts                        | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\engine\casa-por-casa\urbano.engine.ts                        | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\cotizaciones\engine\telefonico\telefonico.engine.ts                       | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\projects\dto\create-project.dto.ts                                        | TypeScript         |         25 |          1 |          4 |         30 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\projects\dto\project-summary.dto.ts                                       | TypeScript         |         24 |          1 |          1 |         26 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\projects\dto\update-project.dto.ts                                        | TypeScript         |          3 |          1 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\projects\projects.controller.ts                                           | TypeScript         |         83 |          1 |          9 |         93 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\projects\projects.module.ts                                               | TypeScript         |         11 |          0 |          2 |         13 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\projects\projects.service.ts                                              | TypeScript         |        223 |         19 |         23 |        265 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\roles\dto\create-role.dto.ts                                              | TypeScript         |          8 |          1 |          2 |         11 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\roles\dto\update-role.dto.ts                                              | TypeScript         |          3 |          1 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\roles\entities\role.entity.ts                                             | TypeScript         |          0 |          0 |          1 |          1 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\roles\roles.controller.ts                                                 | TypeScript         |         35 |          1 |          7 |         43 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\roles\roles.module.ts                                                     | TypeScript         |         10 |          1 |          2 |         13 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\roles\roles.service.ts                                                    | TypeScript         |         25 |          2 |          7 |         34 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\dto\create-user.dto.ts                                              | TypeScript         |         45 |          1 |          7 |         53 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\dto\update-user.dto.ts                                              | TypeScript         |          3 |          1 |          2 |          6 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\entities\user.entity.ts                                             | TypeScript         |         13 |          1 |          1 |         15 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\users.controller.spec.ts                                            | TypeScript         |         14 |          1 |          5 |         20 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\users.controller.ts                                                 | TypeScript         |         47 |          1 |          7 |         55 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\users.module.ts                                                     | TypeScript         |          9 |          1 |          2 |         12 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\users.service.spec.ts                                               | TypeScript         |         14 |          1 |          5 |         20 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\modules\users\users.service.ts                                                    | TypeScript         |        106 |          9 |         14 |        129 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\seeds\seed-constantes.ts                                                          | TypeScript         |         80 |         17 |         12 |        109 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\seeds\seed-roles.ts                                                               | TypeScript         |         19 |          1 |          6 |         26 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\shared\mailer\mailer.module.ts                                                    | TypeScript         |          9 |          1 |          2 |         12 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\src\shared\mailer\mailer.service.ts                                                   | TypeScript         |         53 |         10 |          8 |         71 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\test\app.e2e-spec.ts                                                                  | TypeScript         |         21 |          0 |          5 |         26 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\test\jest-e2e.json                                                                    | JSON               |          9 |          0 |          1 |         10 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\tsconfig.build.json                                                                   | JSON               |          4 |          0 |          1 |          5 |
+| c:\Users\hpalv\OneDrive\Documentos\uniquote-api\tsconfig.json                                                                         | JSON with Comments |         32 |          0 |          1 |         33 |
+| Total                                                                                                                                 |                    |     23,183 |        858 |        982 |     25,023 |
++---------------------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

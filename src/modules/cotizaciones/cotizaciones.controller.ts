@@ -22,6 +22,7 @@ import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { UpdateCotizacionItemDto } from './dto/update-cotizacion-item.dto';
+import { UpdateDistribucionDto } from './dto/update-distribucion.dto';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
 import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
@@ -35,14 +36,12 @@ import type { Request } from 'express';
 export class CotizacionesController {
   constructor(private readonly service: CotizacionesService) {}
 
-
   @Post()
   @ApiOperation({ summary: 'Crear una nueva cotización para un proyecto' })
   create(@Body() dto: CreateCotizacionDto, @Req() req: Request) {
     const user = req.user as any;
     return this.service.create(dto, user.id);
   }
-
 
   @Get()
   @ApiOperation({ summary: 'Listar cotizaciones por proyecto' })
@@ -56,13 +55,11 @@ export class CotizacionesController {
     return this.service.findAllByProject(projectId);
   }
 
-
   @Get('all')
   @ApiOperation({ summary: 'Listar todas las cotizaciones' })
   findAll() {
     return this.service.findAll();
   }
-
 
   @Get('mine')
   @ApiOperation({ summary: 'Listar mis cotizaciones (usuario autenticado)' })
@@ -76,7 +73,6 @@ export class CotizacionesController {
   findByCliente(@Param('clienteId', ParseIntPipe) clienteId: number) {
     return this.service.findByCliente(clienteId);
   }
-
 
   @Get('stats/total')
   @ApiOperation({ summary: 'Total de cotizaciones registradas' })
@@ -102,20 +98,17 @@ export class CotizacionesController {
     return this.service.countByStatus('NO_APROBADO');
   }
 
-
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalles de una cotización (con items)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
   }
 
-
   @Get(':id/distribucion-nacional')
   @ApiOperation({ summary: 'Obtener tabla de distribución nacional por departamento' })
   getDistribucionNacional(@Param('id', ParseIntPipe) id: number) {
     return this.service.getDistribucionNacional(id);
   }
-
 
   @Patch(':id')
   @ApiOperation({
@@ -141,7 +134,23 @@ export class CotizacionesController {
     const user = req.user as any;
     return this.service.updateItem(id, itemId, dto, user.id);
   }
-  
+
+  @Patch(':id/distribucion-nacional')
+  @UseGuards(JwtAuthGuard, RoleIdsGuard)
+  @RoleIds(1, 2) // Admin, Gerente
+  @ApiOperation({
+    summary:
+      'Editar tabla de distribución nacional (ADMIN/GERENTE). Recalcula trabajo de campo y devuelve la tabla completa',
+  })
+  updateDistribucion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDistribucionDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.service.updateDistribucionNacional(id, dto, user.id);
+  }
+
   @Patch(':id/status')
   @ApiOperation({ summary: 'Cambiar estado de la cotización' })
   updateStatus(
@@ -153,7 +162,6 @@ export class CotizacionesController {
     return this.service.updateStatus(id, dto, user.id);
   }
 
-
   @Post(':id/clone')
   @ApiOperation({
     summary: 'Clonar una cotización (solo si está en estado aprobado) como borrador',
@@ -163,6 +171,14 @@ export class CotizacionesController {
     return this.service.clone(id, user.id);
   }
 
+  @Delete(':id/distribucion-nacional')
+  @UseGuards(JwtAuthGuard, RoleIdsGuard)
+  @RoleIds(1, 2)
+  @ApiOperation({ summary: 'Eliminar overrides de distribución nacional y volver al engine' })
+  resetDistribucion(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
+    const user = req.user as any;
+    return this.service.resetDistribucionNacional(id, user.id);
+  }
 
   @Delete(':id')
   @ApiOperation({
