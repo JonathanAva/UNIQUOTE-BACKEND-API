@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { Request, Response } from 'express';
+import { SetInitialPasswordDto } from './dto/set-initial-password.dto'; // ✅ NUEVO
 
 // Grupo de endpoints relacionados a autenticación
 @ApiTags('Auth')
@@ -40,6 +41,17 @@ export class AuthController {
   ) {
     // Delegamos toda la lógica de login/mfa al servicio
     return this.authService.login(dto, req, res);
+  }
+
+  // ✅ NUEVO: establecer la contraseña inicial (cuando mustChangePassword = true)
+  @Post('set-initial-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Establecer contraseña inicial (token de un solo uso devuelto por /auth/login cuando password temporal)',
+  })
+  async setInitialPassword(@Body() dto: SetInitialPasswordDto) {
+    return this.authService.setInitialPassword(dto);
   }
 
   // Endpoint para verificar el código de email (MFA)

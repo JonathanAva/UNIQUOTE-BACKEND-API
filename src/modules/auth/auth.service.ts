@@ -1,3 +1,4 @@
+// src/modules/auth/auth.service.ts
 import {
   Injectable,
   UnauthorizedException,
@@ -127,6 +128,12 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
+  // ✅ NUEVO: token corto y de un solo propósito para cambiar contraseña inicial
+  private signPasswordChangeToken(user: { id: number; email: string }) {
+    const payload = { sub: user.id, email: user.email, scope: 'pwd_change' as const };
+    return this.jwtService.sign(payload, { expiresIn: '15m' });
+  }
+
   // ----------------- core auth -----------------
 
   // Valida credenciales del usuario y devuelve el usuario con su rol
@@ -146,12 +153,23 @@ export class AuthService {
   /**
    * LOGIN:
    * - Valida credenciales
-   * - Inspecciona device_id (cookie) y TrustedDevice
+   * - Si mustChangePassword=true -> NO MFA ni token de acceso; devuelve token de cambio de contraseña
    * - Si confianza vigente -> NO MFA -> token
    * - Si no -> envia OTP y retorna MFA_REQUIRED
    */
   async login(dto: LoginDto, req: Request, res: Response) {
     const user = await this.validateUser(dto.email, dto.password);
+
+    // ✅ Si debe cambiar contraseña, devolvemos token de cambio y NO emitimos accessToken
+    if ((user as any).mustChangePassword) {
+      const token = this.signPasswordChangeToken(user);
+      this.clearMfaTrustedCookie(res); // por higiene
+      return {
+        status: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Debes cambiar tu contraseña temporal antes de continuar.',
+        token,
+      };
+    }
 
     // Identificar (o crear) device_id del navegador
     const deviceId = this.getOrSetDeviceIdCookie(req, res);
@@ -173,6 +191,49 @@ export class AuthService {
     this.clearMfaTrustedCookie(res);
 
     return { status: 'MFA_REQUIRED', message: `Se envió un código a ${user.email}` };
+  }
+
+  /**
+   * ✅ NUEVO:
+   * Establecer la contraseña inicial usando el token de un solo uso (scope=pwd_change)
+   */
+  async setInitialPassword(dto: { token: string; newPassword: string }) {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(dto.token);
+    } catch {
+      throw new BadRequestException('Token inválido o expirado');
+    }
+
+    if (payload?.scope !== 'pwd_change' || typeof payload?.sub !== 'number') {
+      throw new BadRequestException('Token no autorizado para cambio de contraseña');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+    if (!user) throw new BadRequestException('Usuario no encontrado');
+
+    // Si ya no requiere cambio, no permitimos reusar este token
+    if (!(user as any).mustChangePassword) {
+      throw new BadRequestException('Este usuario ya cambió su contraseña');
+    }
+
+    // Hashear y actualizar
+    const passwordHash = await argon2.hash(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: passwordHash,
+        mustChangePassword: false,
+        passwordChangedAt: new Date(),
+      } as any,
+    });
+
+    // Puedes devolver accessToken aquí si prefieres saltar un segundo login.
+    // Para mantener tu flujo actual, pedimos que vuelva a loguearse.
+    return { ok: true, message: 'Contraseña actualizada. Vuelve a iniciar sesión.' };
   }
 
   /**
@@ -244,7 +305,7 @@ export class AuthService {
     }
 
     // Genera token de acceso final
-    const accessToken = this.signAccessToken(user);
+    const accessToken = this.signAccessToken(user as any);
     return { accessToken };
   }
 

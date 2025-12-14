@@ -52,6 +52,9 @@ model User {
   roleId            Int
   role              Role      @relation(fields: [roleId], references: [id])
 
+  mustChangePassword    Boolean   @default(false) // ← obliga cambio
+  passwordChangedAt     DateTime? 
+
   mfaLastVerifiedAt DateTime?
 
   createdAt DateTime @default(now())
