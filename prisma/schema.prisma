@@ -196,6 +196,7 @@ model Cotizacion {
   realizamosScript        Boolean
   clienteSolicitaReporte  Boolean
   clienteSolicitaInformeBI Boolean
+  clienteSolicitaTablas   Boolean?  // opcional; default null/false si prefieres
   incentivoTotal          Int?
 
   // Totales

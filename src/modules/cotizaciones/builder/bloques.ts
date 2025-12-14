@@ -37,6 +37,13 @@ function getPrecioHoraDireccion(constantes: Record<string, number>, fallback = 1
   return getCosto(constantes, ['Dirección.Precio por hora director', 'Dirección.Precio hora dirección'], fallback);
 }
 
+function getPreguntasPorMin(constantes: Record<string, number>, fallback = 4) {
+  return getCosto(constantes, ['Procesamiento.Preguntas por minuto', 'General.Preguntas por minuto'], fallback);
+}
+function getPrecioHoraProc(constantes: Record<string, number>, fallback = 10) {
+  return getCosto(constantes, ['Procesamiento.Precio por hora', 'Dirección.Precio por hora', 'precio por hora'], fallback);
+}
+
 
 /** Redondea a 2 decimales */
 export const round2 = (v: number): number => Math.round(v * 100) / 100;
@@ -453,117 +460,111 @@ export function buildRecursosCasaPorCasaNacional(
 
   // --- Plataformas por canal ---
   const esCallCenter = (tipoEntrevista ?? '').toLowerCase().includes('call');
-  const esOnline = (tipoEntrevista ?? '').toLowerCase().includes('online');
+  const esOnline     = (tipoEntrevista ?? '').toLowerCase().includes('online');
 
   // Plataforma de Captura STG (CPC → costo por entrevista)
   {
     const unit = getCosto(constantes, ['Recursos.Plataforma de Captura STG'], 0);
     const total = round2(totalEntrevistasAjustado * unit);
-    items.push(
-      buildItemConTotal({
-        category: 'RECURSOS',
-        description: 'Plataforma de Captura STG',
-        personas: totalEntrevistasAjustado,
-        // En Excel muestran 0.00; dejamos 0 para reflejarlo
-        dias: 0,
-        costoUnitario: unit,
-        costoTotal: total,
-        comisionable: false,
-        orden: 26,
-        factorComisionable,
-        factorNoComisionable,
-      }),
-    );
+    // La dejamos solo si tiene costo (>0). Si la quieres siempre, elimina el if.
+    if (total > 0) {
+      items.push(
+        buildItemConTotal({
+          category: 'RECURSOS',
+          description: 'Plataforma de Captura STG',
+          personas: totalEntrevistasAjustado,
+          dias: 0,
+          costoUnitario: unit,
+          costoTotal: total,
+          comisionable: false,
+          orden: 26,
+          factorComisionable,
+          factorNoComisionable,
+        }),
+      );
+    }
   }
 
-  // Plataforma Call Center (solo si aplica el canal)
-  {
-    const unitPlataforma = esCallCenter
-      ? getCosto(constantes, ['Recursos.Plataforma Call Center'], 0)
-      : 0;
+  // ===== Plataforma Call Center y Teléfono (solo si canal Call Center y total > 0) =====
+  if (esCallCenter) {
+    const unitPlataforma = getCosto(constantes, ['Recursos.Plataforma Call Center'], 0);
     const totalPlataforma = round2(totalEntrevistasAjustado * unitPlataforma * 1); // 1 día
+    if (totalPlataforma > 0) {
+      items.push(
+        buildItemConTotal({
+          category: 'RECURSOS',
+          description: 'Plataforma Call Center',
+          personas: totalEntrevistasAjustado,
+          dias: 1,
+          costoUnitario: unitPlataforma,
+          costoTotal: totalPlataforma,
+          comisionable: false,
+          orden: 27,
+          factorComisionable,
+          factorNoComisionable,
+        }),
+      );
+    }
 
-    items.push(
-      buildItemConTotal({
-        category: 'RECURSOS',
-        description: 'Plataforma Call Center',
-        personas: totalEntrevistasAjustado,
-        dias: 1,
-        costoUnitario: unitPlataforma,
-        costoTotal: totalPlataforma,
-        comisionable: false,
-        orden: 27,
-        factorComisionable,
-        factorNoComisionable,
-      }),
-    );
-  }
-
-  // Teléfono Call Center (solo si aplica el canal; Excel usa 18 días)
-  {
-    const unitTelefono = esCallCenter
-      ? getCosto(constantes, ['Recursos.Telefono Call Center', 'Recursos.Teléfono Call Center'], 0)
-      : 0;
+    const unitTelefono = getCosto(constantes, ['Recursos.Telefono Call Center', 'Recursos.Teléfono Call Center'], 0);
     const totalTelefono = round2(totalEntrevistasAjustado * unitTelefono * 18);
-
-    items.push(
-      buildItemConTotal({
-        category: 'RECURSOS',
-        description: 'Telefono Call Center',
-        personas: totalEntrevistasAjustado,
-        dias: 18,
-        costoUnitario: unitTelefono,
-        costoTotal: totalTelefono,
-        comisionable: true, // en tu Excel aparece Sí
-        orden: 28,
-        factorComisionable,
-        factorNoComisionable,
-      }),
-    );
+    if (totalTelefono > 0) {
+      items.push(
+        buildItemConTotal({
+          category: 'RECURSOS',
+          description: 'Telefono Call Center',
+          personas: totalEntrevistasAjustado,
+          dias: 18,
+          costoUnitario: unitTelefono,
+          costoTotal: totalTelefono,
+          comisionable: true, // en tu Excel aparece Sí
+          orden: 28,
+          factorComisionable,
+          factorNoComisionable,
+        }),
+      );
+    }
   }
 
-  // Plataforma Online (solo si aplica)
-  {
-    const unitPlataformaOnline = esOnline
-      ? getCosto(constantes, ['Recursos.Plataforma Online'], 0)
-      : 0;
+  // ===== Plataforma Online y Pauta (solo si canal Online y total > 0) =====
+  if (esOnline) {
+    const unitPlataformaOnline = getCosto(constantes, ['Recursos.Plataforma Online'], 0);
     const totalPlataformaOnline = round2(1 * unitPlataformaOnline); // 1 día, 1 persona simbólica
+    if (totalPlataformaOnline > 0) {
+      items.push(
+        buildItemConTotal({
+          category: 'RECURSOS',
+          description: 'Plataforma Online',
+          personas: 1,
+          dias: 1,
+          costoUnitario: unitPlataformaOnline,
+          costoTotal: totalPlataformaOnline,
+          comisionable: false,
+          orden: 29,
+          factorComisionable,
+          factorNoComisionable,
+        }),
+      );
+    }
 
-    items.push(
-      buildItemConTotal({
-        category: 'RECURSOS',
-        description: 'Plataforma Online',
-        personas: 1,
-        dias: 1,
-        costoUnitario: unitPlataformaOnline,
-        costoTotal: totalPlataformaOnline,
-        comisionable: false,
-        orden: 29,
-        factorComisionable,
-        factorNoComisionable,
-      }),
-    );
-  }
-
-  // Pauta Online (solo si aplica; usa base)
-  {
-    const unitPauta = esOnline ? getCosto(constantes, ['Recursos.Pauta Online'], 0) : 0;
+    const unitPauta = getCosto(constantes, ['Recursos.Pauta Online'], 0);
     const totalPauta = round2(totalEntrevistasBase * unitPauta * 1);
-
-    items.push(
-      buildItemConTotal({
-        category: 'RECURSOS',
-        description: 'Pauta Online',
-        personas: totalEntrevistasBase,
-        dias: 1,
-        costoUnitario: unitPauta,
-        costoTotal: totalPauta,
-        comisionable: false,
-        orden: 30,
-        factorComisionable,
-        factorNoComisionable,
-      }),
-    );
+    if (totalPauta > 0) {
+      items.push(
+        buildItemConTotal({
+          category: 'RECURSOS',
+          description: 'Pauta Online',
+          personas: totalEntrevistasBase,
+          dias: 1,
+          costoUnitario: unitPauta,
+          costoTotal: totalPauta,
+          comisionable: false,
+          orden: 30,
+          factorComisionable,
+          factorNoComisionable,
+        }),
+      );
+    }
   }
 
   // Incentivo (si aplica)
@@ -736,56 +737,99 @@ export function buildSupervisorScript(
 
 
 
+// ...imports y helpers iguales...
+
 export function buildReporteResultados(
   _params: { factorComisionable: number; factorNoComisionable: number },
   constantes?: Record<string, number>,
-  extras?: {
-    duracionCuestionarioMin?: number; // ← la pasaremos desde el builder
-  },
+  extras?: { duracionCuestionarioMin?: number },
 ): CotizacionItemBuild {
   // Parámetros base
-  const duracion = Number(extras?.duracionCuestionarioMin ?? 10); // ej. 10
+  const duracion = Number(extras?.duracionCuestionarioMin ?? 10);
   const ppm = constantes
-    ? getCosto(constantes, ['Dirección.Parametro preguntas por minuto', 'Dirección.Preguntas por minuto'], 4)
+    ? getCosto(constantes, ['Dirección.Parametro preguntas por minuto', 'Dirección.Preguntas por minuto', 'General.Preguntas por minuto'], 4)
     : 4;
-  const precioHora = getPrecioHoraDireccion(constantes ?? {}, 10); // $/hora
+  const precioHora = getPrecioHoraDireccion(constantes ?? {}, 10);
   const baseComisionable = getBaseComisionable(constantes ?? {}, 0.4);
 
   // Preguntas = duración * ppm
-  const preguntas = duracion * ppm; // ej. 10 * 4 = 40
+  const preguntas = duracion * ppm;
 
-  // --- Minutos por rubro (replica exacto al Excel) ---
-  const disenoMin         = 180;                 // 3 h fijas
-  const procesamientoMin  = 5 * preguntas;       // B89 (5) * C89 (preguntas)
-  const graficasMin       = 60 * (preguntas / 10); // B90 (60) * (preguntas/10)
-  const revisionMin       = 10 * (preguntas / 10); // B91 (10) * (preguntas/10)
-  const presentacionMin   = 120;                 // 2 h fijas
-
-  // Ajustes:
-  // D84 = preguntas + (preguntas/2) = 1.5 * preguntas
-  // E93 (horas) = 2 + (D84 * 3 / 60)  → 2 + (1.5 * preguntas * 3 / 60)
-  // Ajustes (min) = E93 * 60
-  const e93Horas          = 2 + ((1.5 * preguntas) * 3) / 60;
-  const ajustesMin        = e93Horas * 60;
+  // --- Minutos por rubro (SIN "Procesamiento") ---
+  const disenoMin       = 180;                         // 3 h fijas
+  const graficasMin     = 60 * (preguntas / 4);        // 60 * (#preg/4)
+  const revisionMin     = 10 * (preguntas / 4);        // 10 * (#preg/4)
+  const presentacionMin = 120;                         // 2 h fijas
+  const ajustesMin      = 300;                         // 5 h fijas
 
   // Totales
-  const totalMin  = disenoMin + procesamientoMin + graficasMin + revisionMin + presentacionMin + ajustesMin;
-  const totalHrs  = totalMin / 60;               // ej. 1500/60 = 25
-  const costoBase = round2(totalHrs * precioHora); // ej. 25 * 10 = 250.00
-  const conCom    = round2(costoBase / baseComisionable); // ej. 250 / 0.4 = 625.00
+  const totalMin  = disenoMin + graficasMin + revisionMin + presentacionMin + ajustesMin;
+  const totalHrs  = totalMin / 60;
+  const costoBase = round2(totalHrs * precioHora);     // 216.67 con 10min y ppm=4
+  const conCom    = round2(costoBase / baseComisionable); // 541.67
 
   return {
     category: 'DIRECCIÓN',
     description: 'Reporte de Resultados',
     personas: 1,
     dias: 1,
-    costoUnitario: null,   // en tu tabla aparece “–”
-    costoTotal: costoBase, // ← 250.00
+    costoUnitario: null,
+    costoTotal: costoBase,       // 216.67
     comisionable: true,
-    totalConComision: conCom, // ← 625.00
+    totalConComision: conCom,    // 541.67
     orden: 35,
   };
 }
+
+/**
+ * PROCESAMIENTO → Tablas (opcional)
+ * Fórmulas (tu Excel):
+ *   preguntas        = duracion * 4
+ *   min              = 5 * preguntas
+ *   horas            = min / 60
+ *   costoBase        = horas * precioHoraTablas
+ *   totalConComision = costoBase / 0.4
+ *
+ * precioHoraTablas: se toma de constantes (recomendado):
+ *   'Procesamiento.Tablas precio por hora'
+ * fallback: 10 (mismo precio por hora).
+ */
+export function buildTablasProcesamiento(
+  params: {
+    duracionCuestionarioMin: number;
+    factorComisionable: number;
+    factorNoComisionable: number;
+  },
+  constantes?: Record<string, number>,
+): CotizacionItemBuild {
+  const C = constantes ?? {};
+  const dur = Number(params.duracionCuestionarioMin || 0);
+  const pregPorMin = getPreguntasPorMin(C, 4);
+  const baseCom    = getBaseComisionable(C, 0.4);
+
+  // precio/hora específico para Tablas (o usa los generales si no existe)
+  const precioHoraTablas =
+    getCosto(C, ['Procesamiento.Tablas precio por hora', 'Procesamiento.Precio por hora', 'Dirección.Precio por hora director'], 10);
+
+  const preguntas = dur * pregPorMin;      // 40 (con 10min y 4 ppm)
+  const minutos   = 5 * preguntas;         // 200
+  const horas     = minutos / 60;          // 3.333333
+  const base      = round2(horas * precioHoraTablas);   // 33.33 si $/h=10
+  const conCom    = round2(base / baseCom);             // 83.33
+
+  return {
+    category: 'PROCESAMIENTO',
+    description: 'Tablas',
+    personas: 1,
+    dias: 0,                 // 0.00 como en tu tabla
+    costoUnitario: precioHoraTablas,
+    costoTotal: base,        // 33.33
+    comisionable: true,
+    totalConComision: conCom,// 83.33
+    orden: 53,               // detrás de Base+Limpieza si quieres
+  };
+}
+
 
 
 export function buildInformeBi(
@@ -852,71 +896,157 @@ export function buildInformeBi(
 // PROCESAMIENTO
 // ---------------------------------------------------------------------------
 
-export function buildCodificacionProcesamiento(params: {
-  factorComisionable: number;
-  factorNoComisionable: number;
-}): CotizacionItemBuild {
-  const costo = 300;
+// Helpers ya existen arriba: getCosto, getBaseComisionable, round2, aplicarComision
+
+export function buildCodificacionProcesamiento(
+  params: {
+    totalEntrevistas: number;
+    duracionCuestionarioMin: number;
+    factorComisionable: number;
+    factorNoComisionable: number;
+  },
+  constantes?: Record<string, number>,
+): CotizacionItemBuild {
+  const totalEntrevistas = params.totalEntrevistas;
+  const durMin = params.duracionCuestionarioMin;
+
+  // Excel: Param preguntas/min (default 4)
+  const pregPorMin = constantes
+    ? getCosto(constantes, [
+        'General.Parametro preguntas por minuto',
+        'Dirección.Parametro de preguntas por minuto',
+      ], 4)
+    : 4;
+
+  // Excel: base comisionable (0.4)
+  const baseComisionable = constantes
+    ? getBaseComisionable(constantes, 0.4)
+    : 0.4;
+
+  // Excel: tasa 0.02 (puedes moverla a constantes si quieres)
+  const tasaCodif = constantes
+    ? getCosto(constantes, ['Procesamiento.Tasa codificación'], 0.02)
+    : 0.02;
+
+  // ---- Fórmulas Excel ----
+  const preguntas = durMin * pregPorMin;        // B84 = duración * 4
+  const c104 = preguntas * 0.1;                 // C104 = preguntas * 0.1
+  const costoTotal = round2(
+    c104 * totalEntrevistas * (tasaCodif / baseComisionable)
+  );                                            // = 200 con 10min, 1000 ent
+  const totalConComision = round2(costoTotal / baseComisionable); // = 500
+
+  // En tu tabla el "unitario" muestra 14.40; no afecta totales.
+  // Dejamos dias=0 y costoUnitario opcional (puedes calcularlo como decoración).
   return {
     category: 'PROCESAMIENTO',
     description: 'Codificación',
     personas: 1,
-    dias: 1,
-    costoUnitario: costo,
-    costoTotal: costo,
+    dias: 0,                      // 0.00 como en Excel
+    costoUnitario: null,          // puedes poner 14.40 si lo quieres “decorativo”
+    costoTotal,                   // 200.00
     comisionable: true,
-    totalConComision: aplicarComision(
-      costo,
-      true,
-      params.factorComisionable,
-      params.factorNoComisionable,
-    ),
+    totalConComision,             // 500.00
     orden: 50,
   };
 }
 
-export function buildControlCalidadProcesamiento(params: {
-  factorComisionable: number;
-  factorNoComisionable: number;
-}): CotizacionItemBuild {
-  const costo = 500;
+
+export function buildControlCalidadProcesamiento(
+  params: {
+    totalEntrevistas: number;
+    duracionCuestionarioMin: number;
+    factorComisionable: number;
+    factorNoComisionable: number;
+  },
+  constantes?: Record<string, number>,
+): CotizacionItemBuild {
+  const totalEntrevistas = params.totalEntrevistas;
+  const durMin = params.duracionCuestionarioMin;
+
+  // Minutos totales a escuchar (se muestran en la columna "días")
+  const minutos = totalEntrevistas * durMin;             // ej. 1000 * 10 = 10000
+  const horas   = minutos / 60;                          // 166.6667
+
+  // Precio por hora para CC (desde constantes; default = 2)
+  const precioHora = constantes
+    ? getCosto(constantes, [
+        'Procesamiento.Precio hora CC',
+        'Procesamiento.Precio hora',
+        'Dirección.Precio por hora CC',
+      ], 2)
+    : 2;
+
+  // Base comisionable (margen Excel)
+  const baseComisionable = constantes
+    ? getBaseComisionable(constantes, 0.4)
+    : 0.4;
+
+  const costoBase = round2(horas * precioHora);          // 333.33
+  const totalConComision = round2(costoBase / baseComisionable); // 833.33
+
   return {
     category: 'PROCESAMIENTO',
     description: 'Control de Calidad',
     personas: 1,
-    dias: 1,
-    costoUnitario: costo,
-    costoTotal: costo,
+    dias: minutos,             // ⬅️ 10000, igual a tu Excel
+    costoUnitario: null,       // se muestra “–” en Excel
+    costoTotal: costoBase,     // 333.33
     comisionable: true,
-    totalConComision: aplicarComision(
-      costo,
-      true,
-      params.factorComisionable,
-      params.factorNoComisionable,
-    ),
+    totalConComision,          // 833.33
     orden: 51,
   };
 }
 
-export function buildBaseLimpiezaProcesamiento(params: {
-  factorComisionable: number;
-  factorNoComisionable: number;
-}): CotizacionItemBuild {
-  const costo = 66.67;
+
+// ---------------------------------------------------------------------------
+// PROCESAMIENTO – Base + Limpieza (digital)
+// Fórmula Excel (Sheet1 (2)):
+//   preguntas        = duracionCuestionario * paramPregPorMin
+//   minutos          = 1 (fijo) * duracionCuestionario * preguntas
+//   horas            = minutos / 60
+//   costoTotal (base)= horas * precioHoraProcesamiento
+//   totalConComision = costoTotal / 0.4
+//   (muestra: personas=1, dias=0.00, unitario=precioHora)
+// ---------------------------------------------------------------------------
+export function buildBaseLimpiezaProcesamiento(
+  params: {
+    factorComisionable: number;
+    factorNoComisionable: number;
+    duracionCuestionarioMin: number;  // ← viene de la coti
+  },
+  constantes?: Record<string, number>,
+): CotizacionItemBuild {
+  const C = constantes ?? {};
+  const duracion = Number(params.duracionCuestionarioMin || 0);
+  const pregPorMin = getPreguntasPorMin(C, 4);    // fijo 4 si no hay constante
+  const precioHora = getPrecioHoraProc(C, 10);    // fijo 10 si no hay constante
+  const baseCom    = getBaseComisionable(C, 0.4); // divisor 0.4
+
+  // preguntas = duración * 4
+  const preguntas = duracion * pregPorMin;
+
+  // minutos = (1 * duración) * preguntas
+  const minutos = duracion * preguntas;
+
+  // horas = minutos/60
+  const horas = minutos / 60;
+
+  // base = horas * precioHora  → 66.67 con tus números
+  const base = round2(horas * precioHora);
+
+  // comisionado = base / 0.4 → 166.67
+  const conCom = round2(base / baseCom);
+
   return {
     category: 'PROCESAMIENTO',
     description: 'Base + Limpieza (digital)',
     personas: 1,
-    dias: 1,
-    costoUnitario: costo,
-    costoTotal: costo,
+    dias: 0,                // en tu tabla aparece 0.00
+    costoUnitario: precioHora, // en tu Excel muestran $10.00
+    costoTotal: base,       // 66.67
     comisionable: true,
-    totalConComision: aplicarComision(
-      costo,
-      true,
-      params.factorComisionable,
-      params.factorNoComisionable,
-    ),
+    totalConComision: conCom, // 166.67
     orden: 52,
   };
 }

@@ -21,6 +21,7 @@ import {
   buildCodificacionProcesamiento,
   buildControlCalidadProcesamiento,
   buildBaseLimpiezaProcesamiento,
+  buildTablasProcesamiento,
 } from './bloques';
 
 import {
@@ -45,6 +46,7 @@ export interface CasaPorCasaNacionalBuilderParams {
   clienteSolicitaReporte: boolean;
   clienteSolicitaInformeBI: boolean;
   numeroOlasBi: number;
+  clienteSolicitaTablas?: boolean;
   trabajoDeCampoRealiza: boolean;
   trabajoDeCampoTipo?: 'propio' | 'subcontratado';
   trabajoDeCampoCosto?: number;
@@ -80,46 +82,27 @@ export async function buildCotizacionCasaPorCasa(
   const factorComisionable = params.factorComisionable ?? 1;
   const factorNoComisionable = params.factorNoComisionable ?? 0.05;
 
-  // -------------------------------------------------------------------------
-  // 1) Normalizar penetración (acepta número / %, fácil/medio/difícil)
-  // -------------------------------------------------------------------------
+  // 1) Normalizar penetración
   let penetracion: number;
-
   if (typeof params.penetracionCategoria === 'string') {
     const raw = params.penetracionCategoria.trim().toLowerCase();
-
-    if (raw === 'facil' || raw === 'fácil') {
-      penetracion = 0.85;
-    } else if (raw === 'medio') {
-      penetracion = 0.6;
-    } else if (raw === 'dificil' || raw === 'difícil') {
-      penetracion = 0.35;
-    } else if (raw.endsWith('%')) {
-      // soporta "60%" etc.
-      penetracion = parseFloat(raw.replace('%', '')) / 100;
-    } else {
-      penetracion = parseFloat(raw);
-    }
-
+    if (raw === 'facil' || raw === 'fácil') penetracion = 0.85;
+    else if (raw === 'medio') penetracion = 0.6;
+    else if (raw === 'dificil' || raw === 'difícil') penetracion = 0.35;
+    else if (raw.endsWith('%')) penetracion = parseFloat(raw.replace('%', '')) / 100;
+    else penetracion = parseFloat(raw);
     if (isNaN(penetracion) || penetracion <= 0 || penetracion > 1) {
-      throw new Error(
-        `penetracionCategoria inválida: "${params.penetracionCategoria}", debe ser número entre 0 y 1, o una etiqueta válida (fácil, medio, difícil, %).`,
-      );
+      throw new Error(`penetracionCategoria inválida: "${params.penetracionCategoria}"`);
     }
   } else {
     penetracion = params.penetracionCategoria;
   }
 
-  // -------------------------------------------------------------------------
-  // 2) Cargar CONSTANTES desde DB (clave: "Categoría.Subcategoría")
-  // -------------------------------------------------------------------------
+  // 2) Constantes
   const constantes = await constantesService.getAllAsKeyValue();
 
-  // -------------------------------------------------------------------------
-  // 3) Distribución (si TC propio) -> de aquí salen los días (W14 TOTAL)
-  // -------------------------------------------------------------------------
+  // 3) Distribución (engine)
   let distribucion: DistribucionNacionalResult | null = null;
-
   if (params.trabajoDeCampoRealiza && params.trabajoDeCampoTipo === 'propio') {
     distribucion = buildDistribucionNacional({
       totalEntrevistas: params.totalEntrevistas,
@@ -140,12 +123,10 @@ export async function buildCotizacionCasaPorCasa(
     });
   }
 
-  // -------------------------------------------------------------------------
-  // 4) Construir BLOQUES
-  // -------------------------------------------------------------------------
+  // 4) Bloques
   const items: CotizacionItemBuild[] = [];
 
-  // ---- TRABAJO DE CAMPO ----------------------------------------------------
+  // TRABAJO DE CAMPO
   if (params.trabajoDeCampoRealiza) {
     if (params.trabajoDeCampoTipo === 'propio' && distribucion) {
       const campo = await buildTrabajoCampoCasaPorCasaNacional(
@@ -156,13 +137,12 @@ export async function buildCotizacionCasaPorCasa(
           factorNoComisionable,
           distribucion,
         },
-        constantes, // ← pasa constantes (si en bloques se usan)
+        constantes,
       );
       items.push(...campo);
     } else {
       const costo = params.trabajoDeCampoCosto ?? 0;
       const totalConComision = Math.round(costo * (1 + factorComisionable) * 100) / 100;
-
       items.push({
         category: 'TRABAJO DE CAMPO',
         description: 'Trabajo de campo subcontratado',
@@ -177,8 +157,7 @@ export async function buildCotizacionCasaPorCasa(
     }
   }
 
-  // ---- RECURSOS ------------------------------------------------------------
-  // Usa SIEMPRE los días del engine (W14 TOTAL) y los unitarios desde DB
+  // RECURSOS
   items.push(
     ...buildRecursosCasaPorCasaNacional(
       {
@@ -187,100 +166,118 @@ export async function buildCotizacionCasaPorCasa(
         factorComisionable,
         factorNoComisionable,
         incentivoTotal: params.incentivoTotal,
-        distribucion: distribucion!, // usa días del engine (W14)
+        distribucion: distribucion!, // días del engine
+        tipoEntrevista: params.tipoEntrevista, // (opcional, por si filtras plataformas)
       },
-      constantes, // ← unitarios desde DB (p.ej. 0.60, 0.36, 3.00, 5.00, etc.)
+      constantes,
     ),
   );
 
-  // ---- DIRECCIÓN -----------------------------------------------------------
-  // ➕ Días director (según  Excel: 32 días). Se obtiene el unitario de DB
-  //    con la clave "Dirección.Días director" y se aplica comisión.
+  // DIRECCIÓN
+  items.push(
+    buildDiasDirector(
+      { factorComisionable, factorNoComisionable, distribucion: distribucion! },
+      constantes,
+    ),
+  );
+
+  if (params.realizamosCuestionario) {
     items.push(
-      buildDiasDirector(
-        { factorComisionable, factorNoComisionable, distribucion: distribucion! },
+      buildRealizacionCuestionario(
+        { factorComisionable, factorNoComisionable, duracionCuestionarioMin: params.duracionCuestionarioMin },
         constantes,
       ),
     );
+  }
 
+  if (params.realizamosScript) {
+    items.push(
+      buildSupervisorScript(
+        { factorComisionable, factorNoComisionable, duracionCuestionarioMin: params.duracionCuestionarioMin },
+        constantes,
+      ),
+    );
+  }
 
-if (params.realizamosCuestionario) {
+  if (params.clienteSolicitaReporte) {
+    items.push(
+      buildReporteResultados(
+        { factorComisionable, factorNoComisionable },
+        constantes,
+        { duracionCuestionarioMin: params.duracionCuestionarioMin },
+      ),
+    );
+  }
+
+  if (params.clienteSolicitaInformeBI) {
+    items.push(
+      buildInformeBi(
+        {
+          numeroOlasBi: params.numeroOlasBi,
+          factorComisionable,
+          factorNoComisionable,
+          duracionCuestionarioMin: params.duracionCuestionarioMin,
+        },
+        constantes,
+      ),
+    );
+  }
+
+  // PROCESAMIENTO
   items.push(
-    buildRealizacionCuestionario(
+    buildCodificacionProcesamiento(
       {
+        totalEntrevistas: params.totalEntrevistas,
+        duracionCuestionarioMin: params.duracionCuestionarioMin,
         factorComisionable,
         factorNoComisionable,
-        duracionCuestionarioMin: params.duracionCuestionarioMin, // 👈
       },
       constantes,
     ),
   );
-}
 
-
-
-if (params.realizamosScript) {
+  
   items.push(
-    buildSupervisorScript(
+    buildControlCalidadProcesamiento(
       {
+        totalEntrevistas: params.totalEntrevistas,
+        duracionCuestionarioMin: params.duracionCuestionarioMin,
         factorComisionable,
         factorNoComisionable,
-        duracionCuestionarioMin: params.duracionCuestionarioMin, // 👈
       },
       constantes,
     ),
   );
-}
 
-
-
-if (params.clienteSolicitaReporte) {
   items.push(
-    buildReporteResultados(
-      { factorComisionable, factorNoComisionable },
-      constantes,
-      { duracionCuestionarioMin: params.duracionCuestionarioMin }, // ← pasa la duración
-    ),
-  );
-}
-
-
-if (params.clienteSolicitaInformeBI) {
-  items.push(
-    buildInformeBi(
+    buildBaseLimpiezaProcesamiento(
       {
-        numeroOlasBi: params.numeroOlasBi,
         factorComisionable,
         factorNoComisionable,
-        duracionCuestionarioMin: params.duracionCuestionarioMin, 
+        duracionCuestionarioMin: params.duracionCuestionarioMin,
       },
       constantes,
     ),
   );
-}
 
+    if (params.clienteSolicitaTablas) {
+    items.push(
+      buildTablasProcesamiento(
+        {
+          factorComisionable,
+          factorNoComisionable,
+          duracionCuestionarioMin: params.duracionCuestionarioMin,
+        },
+        constantes,
+      ),
+    );
+  }
 
-  // ---- PROCESAMIENTO -------------------------------------------------------
-  // (Estas funciones ya consideran comisión internamente según tu bloques.ts)
-  items.push(buildCodificacionProcesamiento({ factorComisionable, factorNoComisionable }));
-  items.push(buildControlCalidadProcesamiento({ factorComisionable, factorNoComisionable }));
-  items.push(buildBaseLimpiezaProcesamiento({ factorComisionable, factorNoComisionable }));
-
-  // -------------------------------------------------------------------------
-  // 5) TOTALES FINALES
-  // -------------------------------------------------------------------------
-  const totalCobrar = Math.round(
-    items.reduce((sum, i) => sum + (i.totalConComision ?? 0), 0) * 100,
-  ) / 100;
-
+  // 5) Totales
+  const totalCobrar = Math.round(items.reduce((s, i) => s + (i.totalConComision ?? 0), 0) * 100) / 100;
   const costoPorEntrevista =
-    params.totalEntrevistas > 0
-      ? Math.round((totalCobrar / params.totalEntrevistas) * 100) / 100
-      : 0;
+    params.totalEntrevistas > 0 ? Math.round((totalCobrar / params.totalEntrevistas) * 100) / 100 : 0;
 
-  return {
-    items,
-    totalCobrar,
-    costoPorEntrevista,
-  };
+  return { items, totalCobrar, costoPorEntrevista };
 }
+

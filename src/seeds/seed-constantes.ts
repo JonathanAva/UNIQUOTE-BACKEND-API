@@ -78,6 +78,7 @@ async function main() {
     { categoria: 'Procesamiento', subcategoria: 'Codificación', valor: 2.00 },
     { categoria: 'Procesamiento', subcategoria: 'Control de Calidad', valor: 2.00 },
     { categoria: 'Procesamiento', subcategoria: 'Base + Limpieza (digital)', valor: 10.00 },
+    { categoria: 'Procesamiento', subcategoria: 'Tablas precio por hora', valor: 10.00 },
   ];
 
   // Insertar en base de datos (upsert para evitar duplicados)

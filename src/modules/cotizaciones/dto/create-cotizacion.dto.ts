@@ -147,6 +147,15 @@ export class CreateCotizacionDto {
   @IsInt()
   encuestadoresTotales: number;
 
+    @ApiProperty({
+    example: false,
+    description: '¿El cliente requiere tablas en el reporte?',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  clienteSolicitaTablas?: boolean;
+
   @ApiProperty({ example: true, description: '¿La empresa realiza el cuestionario?' })
   @IsBoolean()
   realizamosCuestionario: boolean;

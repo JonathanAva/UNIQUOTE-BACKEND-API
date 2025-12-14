@@ -21,6 +21,7 @@ import { CotizacionesService } from './cotizaciones.service';
 import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
+import { UpdateCotizacionItemDto } from './dto/update-cotizacion-item.dto';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
 import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
@@ -129,7 +130,18 @@ export class CotizacionesController {
     return this.service.update(id, dto, user.id);
   }
 
-
+  @Patch(':id/items/:itemId')
+  @ApiOperation({ summary: 'Editar un ítem de la cotización y recalcular totales' })
+  updateItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Body() dto: UpdateCotizacionItemDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.service.updateItem(id, itemId, dto, user.id);
+  }
+  
   @Patch(':id/status')
   @ApiOperation({ summary: 'Cambiar estado de la cotización' })
   updateStatus(
