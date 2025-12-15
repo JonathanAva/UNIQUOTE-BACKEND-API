@@ -14,42 +14,44 @@ import * as argon2 from 'argon2';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: CreateUserDto) {
-    // Verifica si ya existe un usuario con ese email
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
+async create(data: CreateUserDto) {
+  // Verifica si ya existe un usuario con ese email
+  const existingUser = await this.prisma.user.findUnique({
+    where: { email: data.email },
+  });
 
-    if (existingUser) {
-      throw new ConflictException('El correo electrónico ya está registrado');
-    }
-
-    // Hashea la contraseña antes de guardar
-    const hashedPassword = await argon2.hash(data.password);
-
-    try {
-      return await this.prisma.user.create({
-        data: {
-          ...data,
-          password: hashedPassword,
-        },
-        select: {
-          id: true,
-          name: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          role: {
-            select: { id: true, name: true },
-          },
-          createdAt: true,
-        },
-      });
-    } catch (error) {
-      // Manejo genérico de errores de base de datos
-      throw new InternalServerErrorException('Error al crear el usuario');
-    }
+  if (existingUser) {
+    throw new ConflictException('El correo electrónico ya está registrado');
   }
+
+  // Hashea la contraseña antes de guardar
+  const hashedPassword = await argon2.hash(data.password);
+
+  try {
+    return await this.prisma.user.create({
+      data: {
+        ...data,
+        password: hashedPassword,
+        mustChangePassword: true,         // ← marcar para forzar cambio en primer login
+        passwordChangedAt: null,        
+      },
+      select: {
+        id: true,
+        name: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: { select: { id: true, name: true } },
+        mustChangePassword: true,         
+        createdAt: true,
+      },
+    });
+  } catch (error) {
+    // Manejo genérico de errores de base de datos
+    throw new InternalServerErrorException('Error al crear el usuario');
+  }
+}
+
 
   async findAll() {
     // Lista todos los usuarios con su rol asociado
