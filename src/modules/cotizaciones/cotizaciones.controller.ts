@@ -104,6 +104,13 @@ export class CotizacionesController {
     return this.service.findOne(id);
   }
 
+  // === NUEVO ===
+  @Get(':id/distribucion')
+  @ApiOperation({ summary: 'Obtener tabla de distribución (AMSS o Nacional según cobertura)' })
+  getDistribucion(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getDistribucion(id);
+  }
+
   @Get(':id/distribucion-nacional')
   @ApiOperation({ summary: 'Obtener tabla de distribución nacional por departamento' })
   getDistribucionNacional(@Param('id', ParseIntPipe) id: number) {
@@ -133,6 +140,23 @@ export class CotizacionesController {
   ) {
     const user = req.user as any;
     return this.service.updateItem(id, itemId, dto, user.id);
+  }
+
+  // === NUEVO (alias genérico) ===
+  @Patch(':id/distribucion')
+  @UseGuards(JwtAuthGuard, RoleIdsGuard)
+  @RoleIds(1, 2) // Admin, Gerente
+  @ApiOperation({
+    summary:
+      'Editar tabla de distribución (AMSS/Nacional). Recalcula trabajo de campo y devuelve la tabla completa',
+  })
+  updateDistribucionGenerica(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDistribucionDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.service.updateDistribucionNacional(id, dto, user.id);
   }
 
   @Patch(':id/distribucion-nacional')
@@ -169,6 +193,18 @@ export class CotizacionesController {
   clone(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
     const user = req.user as any;
     return this.service.clone(id, user.id);
+  }
+
+  // === NUEVO (alias genérico) ===
+  @Delete(':id/distribucion')
+  @UseGuards(JwtAuthGuard, RoleIdsGuard)
+  @RoleIds(1, 2)
+  @ApiOperation({
+    summary: 'Eliminar overrides de distribución (AMSS/Nacional) y volver al engine',
+  })
+  resetDistribucionGenerica(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
+    const user = req.user as any;
+    return this.service.resetDistribucionNacional(id, user.id);
   }
 
   @Delete(':id/distribucion-nacional')

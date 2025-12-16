@@ -3,7 +3,7 @@
 // Utiliza constantes dinámicas desde la base de datos para armar cada ítem.
 // ===========================================================================
 
-import { CotizacionItemBuild } from './casa-por-casa.builder';
+import { CotizacionItemBuild } from './casa por casa/nacional.builder';
 import { DistribucionNacionalResult } from '@/modules/cotizaciones/engine/casa-por-casa/nacional.engine';
 
 // ---------------------------------------------------------------------------

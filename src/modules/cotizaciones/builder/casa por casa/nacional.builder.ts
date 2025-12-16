@@ -7,13 +7,16 @@
 //  2) Se inserta el ítem **Días director** antes de “Realización Cuestionario”.
 //  3) Se mantiene el uso de los **días del engine (W14 TOTAL)** para todos
 //     los ítems que dependen de días (coincidiendo con el Excel).
+//  4) AMSS vs Nacional se resuelve por cobertura y SOLO se agregan bloques
+//     dependientes de días si existe distribución (campo propio).
+// ===========================================================================
 
 import { ConstantesService } from '@/modules/constantes/constantes.service';
 
 import {
   buildTrabajoCampoCasaPorCasaNacional,
   buildRecursosCasaPorCasaNacional,
-  buildDiasDirector,                 
+  buildDiasDirector,
   buildRealizacionCuestionario,
   buildSupervisorScript,
   buildReporteResultados,
@@ -22,8 +25,9 @@ import {
   buildControlCalidadProcesamiento,
   buildBaseLimpiezaProcesamiento,
   buildTablasProcesamiento,
-} from './bloques';
+} from '../bloques';
 
+import { buildDistribucionAMSS } from '@/modules/cotizaciones/engine/casa-por-casa/amss.engine';
 import {
   DistribucionNacionalResult,
   buildDistribucionNacional,
@@ -82,7 +86,7 @@ export async function buildCotizacionCasaPorCasa(
   const factorComisionable = params.factorComisionable ?? 1;
   const factorNoComisionable = params.factorNoComisionable ?? 0.05;
 
-  // 1) Normalizar penetración
+  // 1) Normalizar penetración (a número 0..1)
   let penetracion: number;
   if (typeof params.penetracionCategoria === 'string') {
     const raw = params.penetracionCategoria.trim().toLowerCase();
@@ -91,36 +95,64 @@ export async function buildCotizacionCasaPorCasa(
     else if (raw === 'dificil' || raw === 'difícil') penetracion = 0.35;
     else if (raw.endsWith('%')) penetracion = parseFloat(raw.replace('%', '')) / 100;
     else penetracion = parseFloat(raw);
-    if (isNaN(penetracion) || penetracion <= 0 || penetracion > 1) {
+    if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
       throw new Error(`penetracionCategoria inválida: "${params.penetracionCategoria}"`);
     }
   } else {
     penetracion = params.penetracionCategoria;
+    if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+      throw new Error(`penetracionCategoria inválida: "${params.penetracionCategoria}"`);
+    }
   }
 
   // 2) Constantes
   const constantes = await constantesService.getAllAsKeyValue();
 
-  // 3) Distribución (engine)
+  // 3) Distribución (engine) — solo si el trabajo de campo es propio
   let distribucion: DistribucionNacionalResult | null = null;
+
   if (params.trabajoDeCampoRealiza && params.trabajoDeCampoTipo === 'propio') {
-    distribucion = buildDistribucionNacional({
-      totalEntrevistas: params.totalEntrevistas,
-      duracionCuestionarioMin: params.duracionCuestionarioMin,
-      tipoEntrevista: params.tipoEntrevista,
-      penetracionCategoria: penetracion,
-      cobertura: params.cobertura,
-      supervisores: params.supervisores,
-      encuestadoresTotales: params.encuestadoresTotales,
-      realizamosCuestionario: params.realizamosCuestionario,
-      realizamosScript: params.realizamosScript,
-      clienteSolicitaReporte: params.clienteSolicitaReporte,
-      clienteSolicitaInformeBI: params.clienteSolicitaInformeBI,
-      numeroOlasBi: params.numeroOlasBi,
-      trabajoDeCampoRealiza: params.trabajoDeCampoRealiza,
-      trabajoDeCampoTipo: params.trabajoDeCampoTipo,
-      trabajoDeCampoCosto: params.trabajoDeCampoCosto,
-    });
+    const cobertura = (params.cobertura ?? '').trim().toLowerCase();
+
+    if (cobertura === 'amss') {
+      // AMSS
+      distribucion = buildDistribucionAMSS({
+        totalEntrevistas: params.totalEntrevistas,
+        duracionCuestionarioMin: params.duracionCuestionarioMin,
+        tipoEntrevista: params.tipoEntrevista,
+        penetracionCategoria: penetracion,
+        cobertura: params.cobertura,
+        supervisores: params.supervisores,
+        encuestadoresTotales: params.encuestadoresTotales,
+        realizamosCuestionario: params.realizamosCuestionario,
+        realizamosScript: params.realizamosScript,
+        clienteSolicitaReporte: params.clienteSolicitaReporte,
+        clienteSolicitaInformeBI: params.clienteSolicitaInformeBI,
+        numeroOlasBi: params.numeroOlasBi,
+        trabajoDeCampoRealiza: params.trabajoDeCampoRealiza,
+        trabajoDeCampoTipo: params.trabajoDeCampoTipo,
+        trabajoDeCampoCosto: params.trabajoDeCampoCosto,
+      });
+    } else {
+      // Nacional (default)
+      distribucion = buildDistribucionNacional({
+        totalEntrevistas: params.totalEntrevistas,
+        duracionCuestionarioMin: params.duracionCuestionarioMin,
+        tipoEntrevista: params.tipoEntrevista,
+        penetracionCategoria: penetracion,
+        cobertura: params.cobertura,
+        supervisores: params.supervisores,
+        encuestadoresTotales: params.encuestadoresTotales,
+        realizamosCuestionario: params.realizamosCuestionario,
+        realizamosScript: params.realizamosScript,
+        clienteSolicitaReporte: params.clienteSolicitaReporte,
+        clienteSolicitaInformeBI: params.clienteSolicitaInformeBI,
+        numeroOlasBi: params.numeroOlasBi,
+        trabajoDeCampoRealiza: params.trabajoDeCampoRealiza,
+        trabajoDeCampoTipo: params.trabajoDeCampoTipo,
+        trabajoDeCampoCosto: params.trabajoDeCampoCosto,
+      });
+    }
   }
 
   // 4) Bloques
@@ -141,6 +173,7 @@ export async function buildCotizacionCasaPorCasa(
       );
       items.push(...campo);
     } else {
+      // subcontratado
       const costo = params.trabajoDeCampoCosto ?? 0;
       const totalConComision = Math.round(costo * (1 + factorComisionable) * 100) / 100;
       items.push({
@@ -157,30 +190,35 @@ export async function buildCotizacionCasaPorCasa(
     }
   }
 
-  // RECURSOS
-  items.push(
-    ...buildRecursosCasaPorCasaNacional(
-      {
-        encuestadoresTotales: params.encuestadoresTotales,
-        supervisores: params.supervisores,
-        factorComisionable,
-        factorNoComisionable,
-        incentivoTotal: params.incentivoTotal,
-        distribucion: distribucion!, // días del engine
-        tipoEntrevista: params.tipoEntrevista, // (opcional, por si filtras plataformas)
-      },
-      constantes,
-    ),
-  );
+  // RECURSOS (solo si hay distribución: dependen de DIAS del engine)
+  if (distribucion) {
+    items.push(
+      ...buildRecursosCasaPorCasaNacional(
+        {
+          encuestadoresTotales: params.encuestadoresTotales,
+          supervisores: params.supervisores,
+          factorComisionable,
+          factorNoComisionable,
+          incentivoTotal: params.incentivoTotal,
+          distribucion, // días del engine
+          tipoEntrevista: params.tipoEntrevista,
+        },
+        constantes,
+      ),
+    );
+  }
 
-  // DIRECCIÓN
-  items.push(
-    buildDiasDirector(
-      { factorComisionable, factorNoComisionable, distribucion: distribucion! },
-      constantes,
-    ),
-  );
+  // DIRECCIÓN (Días director depende de días del engine) → solo si hay distribución
+  if (distribucion) {
+    items.push(
+      buildDiasDirector(
+        { factorComisionable, factorNoComisionable, distribucion },
+        constantes,
+      ),
+    );
+  }
 
+  // Estos no dependen de la distribución
   if (params.realizamosCuestionario) {
     items.push(
       buildRealizacionCuestionario(
@@ -223,7 +261,7 @@ export async function buildCotizacionCasaPorCasa(
     );
   }
 
-  // PROCESAMIENTO
+  // PROCESAMIENTO (no depende de distribución)
   items.push(
     buildCodificacionProcesamiento(
       {
@@ -236,7 +274,6 @@ export async function buildCotizacionCasaPorCasa(
     ),
   );
 
-  
   items.push(
     buildControlCalidadProcesamiento(
       {
@@ -260,7 +297,7 @@ export async function buildCotizacionCasaPorCasa(
     ),
   );
 
-    if (params.clienteSolicitaTablas) {
+  if (params.clienteSolicitaTablas) {
     items.push(
       buildTablasProcesamiento(
         {
@@ -280,4 +317,3 @@ export async function buildCotizacionCasaPorCasa(
 
   return { items, totalCobrar, costoPorEntrevista };
 }
-

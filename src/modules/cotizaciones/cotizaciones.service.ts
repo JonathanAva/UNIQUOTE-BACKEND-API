@@ -5,13 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@/infra/database/prisma.service';
-import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
+import { CreateCotizacionDto, TrabajoDeCampoTipo } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { CotizacionStatus } from '@prisma/client';
-import { buildCotizacionCasaPorCasa } from './builder/casa-por-casa.builder';
+import { buildCotizacionCasaPorCasa } from './builder/casa por casa/nacional.builder';
 import { UpdateDistribucionDto } from './dto/update-distribucion.dto';
 import { ConstantesService } from '@/modules/constantes/constantes.service';
+import { buildDistribucionAMSS, distribuirEntrevistasAMSS } from '@/modules/cotizaciones/engine/casa-por-casa/amss.engine';
 
 // ✅ Pipeline por pasos para permitir overrides persistentes
 import {
@@ -45,142 +46,152 @@ export class CotizacionesService {
   // ------------------------------------------------------
   // CREAR COTIZACIÓN
   // ------------------------------------------------------
-  async create(dto: CreateCotizacionDto, createdById: number) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: dto.projectId },
-      select: { id: true, clienteId: true },
+ async create(dto: CreateCotizacionDto, createdById: number) {
+  const project = await this.prisma.project.findUnique({
+    where: { id: dto.projectId },
+    select: { id: true, clienteId: true },
+  });
+
+  if (!project) throw new NotFoundException('Proyecto no encontrado');
+
+  if (dto.contactoId) {
+    const contacto = await this.prisma.contactoEmpresa.findFirst({
+      where: { id: dto.contactoId, clienteId: project.clienteId },
     });
 
-    if (!project) throw new NotFoundException('Proyecto no encontrado');
-
-    if (dto.contactoId) {
-      const contacto = await this.prisma.contactoEmpresa.findFirst({
-        where: { id: dto.contactoId, clienteId: project.clienteId },
-      });
-
-      if (!contacto) {
-        throw new NotFoundException(
-          'El contacto no pertenece al cliente del proyecto',
-        );
-      }
-    }
-
-    if (dto.studyType.toLowerCase() === 'cualitativo' && !dto.metodologia) {
-      throw new BadRequestException(
-        'Debe seleccionar una metodología si el estudio es cualitativo',
+    if (!contacto) {
+      throw new NotFoundException(
+        'El contacto no pertenece al cliente del proyecto',
       );
     }
-
-    // ✨ Normaliza penetracion
-    let penetracion: number;
-    if (typeof dto.penetracionCategoria === 'string') {
-      const value = dto.penetracionCategoria.trim().toLowerCase();
-
-      if (value === 'fácil') penetracion = 0.85;
-      else if (value === 'medio') penetracion = 0.6;
-      else if (value === 'difícil') penetracion = 0.35;
-      else if (value.endsWith('%')) penetracion = parseFloat(value) / 100;
-      else penetracion = parseFloat(value);
-    } else {
-      penetracion = dto.penetracionCategoria;
-    }
-
-    if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
-      throw new BadRequestException(
-        'penetracionCategoria debe ser un número válido entre 0.01 y 1.00, o usar: fácil / medio / difícil / porcentaje',
-      );
-    }
-
-    const code = await this.generateCotizacionCode(dto.projectId);
-
-    const cotizacion = await this.prisma.cotizacion.create({
-      data: {
-        projectId: dto.projectId,
-        contactoId: dto.contactoId ?? null,
-        name: dto.name,
-        code,
-        createdById,
-        status: CotizacionStatus.ENVIADO,
-        studyType: dto.studyType,
-        metodologia: dto.metodologia ?? null,
-        trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
-        trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? undefined,
-        trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
-        numeroOlasBi: dto.numeroOlasBi ?? 2,
-        totalEntrevistas: dto.totalEntrevistas,
-        duracionCuestionarioMin: dto.duracionCuestionarioMin,
-        tipoEntrevista: dto.tipoEntrevista,
-        penetracionCategoria: penetracion, // 💥 validado
-        cobertura: dto.cobertura,
-        supervisores: dto.supervisores,
-        encuestadoresTotales: dto.encuestadoresTotales,
-
-        // Flag tablas
-        clienteSolicitaTablas: dto.clienteSolicitaTablas ?? false,
-
-        realizamosCuestionario: dto.realizamosCuestionario,
-        realizamosScript: dto.realizamosScript,
-        clienteSolicitaReporte: dto.clienteSolicitaReporte,
-        clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
-        incentivoTotal: dto.incentivoTotal ?? null,
-      },
-    });
-
-    const builderResult = await buildCotizacionCasaPorCasa(
-      {
-        totalEntrevistas: dto.totalEntrevistas,
-        duracionCuestionarioMin: dto.duracionCuestionarioMin,
-        tipoEntrevista: dto.tipoEntrevista,
-        penetracionCategoria: penetracion,
-        cobertura: dto.cobertura,
-        supervisores: dto.supervisores,
-        encuestadoresTotales: dto.encuestadoresTotales,
-        realizamosCuestionario: dto.realizamosCuestionario,
-        realizamosScript: dto.realizamosScript,
-        clienteSolicitaReporte: dto.clienteSolicitaReporte,
-        clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
-        numeroOlasBi: dto.numeroOlasBi ?? 2,
-        clienteSolicitaTablas: dto.clienteSolicitaTablas === true,
-        trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
-        trabajoDeCampoTipo:
-          dto.trabajoDeCampoTipo === 'propio' ||
-          dto.trabajoDeCampoTipo === 'subcontratado'
-            ? dto.trabajoDeCampoTipo
-            : undefined,
-        trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
-      },
-      this.constantesService,
-    );
-
-    if (builderResult.items.length > 0) {
-      await this.prisma.cotizacionItem.createMany({
-        data: builderResult.items.map((item) => ({
-          cotizacionId: cotizacion.id,
-          category: item.category,
-          description: item.description,
-          personas: item.personas,
-          dias: item.dias,
-          costoUnitario: item.costoUnitario,
-          costoTotal: item.costoTotal,
-          comisionable: item.comisionable,
-          totalConComision: item.totalConComision,
-          orden: item.orden,
-        })),
-      });
-    }
-
-    await this.prisma.cotizacion.update({
-      where: { id: cotizacion.id },
-      data: {
-        totalCobrar: builderResult.totalCobrar,
-        costoPorEntrevista: builderResult.costoPorEntrevista,
-        factorComisionablePct: 1,
-        factorNoComisionablePct: 0.05,
-      },
-    });
-
-    return this.findOne(cotizacion.id);
   }
+
+  if (dto.studyType.toLowerCase() === 'cualitativo' && !dto.metodologia) {
+    throw new BadRequestException(
+      'Debe seleccionar una metodología si el estudio es cualitativo',
+    );
+  }
+
+  // ✨ Normaliza penetracion
+  let penetracion: number;
+  if (typeof dto.penetracionCategoria === 'string') {
+    const value = dto.penetracionCategoria.trim().toLowerCase();
+
+    if (value === 'fácil') penetracion = 0.85;
+    else if (value === 'medio') penetracion = 0.6;
+    else if (value === 'difícil') penetracion = 0.35;
+    else if (value.endsWith('%')) penetracion = parseFloat(value) / 100;
+    else penetracion = parseFloat(value);
+  } else {
+    penetracion = dto.penetracionCategoria;
+  }
+
+  if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+    throw new BadRequestException(
+      'penetracionCategoria debe ser un número válido entre 0.01 y 1.00, o usar: fácil / medio / difícil / porcentaje',
+    );
+  }
+
+  const code = await this.generateCotizacionCode(dto.projectId);
+
+  const cotizacion = await this.prisma.cotizacion.create({
+    data: {
+      projectId: dto.projectId,
+      contactoId: dto.contactoId ?? null,
+      name: dto.name,
+      code,
+      createdById,
+      status: CotizacionStatus.ENVIADO,
+      studyType: dto.studyType,
+      metodologia: dto.metodologia ?? null,
+      trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo: dto.trabajoDeCampoTipo ?? undefined,
+      trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
+      numeroOlasBi: dto.numeroOlasBi ?? 2,
+      totalEntrevistas: dto.totalEntrevistas,
+      duracionCuestionarioMin: dto.duracionCuestionarioMin,
+      tipoEntrevista: dto.tipoEntrevista,
+      penetracionCategoria: penetracion, // 💥 validado
+      cobertura: dto.cobertura,
+      supervisores: dto.supervisores,
+      encuestadoresTotales: dto.encuestadoresTotales,
+
+      // Flag tablas
+      clienteSolicitaTablas: dto.clienteSolicitaTablas ?? false,
+
+      realizamosCuestionario: dto.realizamosCuestionario,
+      realizamosScript: dto.realizamosScript,
+      clienteSolicitaReporte: dto.clienteSolicitaReporte,
+      clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
+      incentivoTotal: dto.incentivoTotal ?? null,
+    },
+  });
+
+  const builderResult = await buildCotizacionCasaPorCasa(
+    {
+      totalEntrevistas: dto.totalEntrevistas,
+      duracionCuestionarioMin: dto.duracionCuestionarioMin,
+      tipoEntrevista: dto.tipoEntrevista,
+      penetracionCategoria: penetracion,
+      cobertura: dto.cobertura,
+      supervisores: dto.supervisores,
+      encuestadoresTotales: dto.encuestadoresTotales,
+      realizamosCuestionario: dto.realizamosCuestionario,
+      realizamosScript: dto.realizamosScript,
+      clienteSolicitaReporte: dto.clienteSolicitaReporte,
+      clienteSolicitaInformeBI: dto.clienteSolicitaInformeBI,
+      numeroOlasBi: dto.numeroOlasBi ?? 2,
+      clienteSolicitaTablas: dto.clienteSolicitaTablas === true,
+      trabajoDeCampoRealiza: dto.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo:
+        dto.trabajoDeCampoTipo === 'propio' ||
+        dto.trabajoDeCampoTipo === 'subcontratado'
+          ? dto.trabajoDeCampoTipo
+          : undefined,
+      trabajoDeCampoCosto: dto.trabajoDeCampoCosto ?? undefined,
+      incentivoTotal: dto.incentivoTotal ?? undefined,
+    },
+    this.constantesService,
+  );
+
+  if (builderResult.items.length > 0) {
+    await this.prisma.cotizacionItem.createMany({
+      data: builderResult.items.map((item) => ({
+        cotizacionId: cotizacion.id,
+        category: item.category,
+        description: item.description,
+        personas: item.personas,
+        dias: item.dias,
+        costoUnitario: item.costoUnitario,
+        costoTotal: item.costoTotal,
+        comisionable: item.comisionable,
+        totalConComision: item.totalConComision,
+        orden: item.orden,
+      })),
+    });
+  }
+
+  // ✅ Guardar factores primero (para que el recálculo los use)
+  await this.prisma.cotizacion.update({
+    where: { id: cotizacion.id },
+    data: {
+      totalCobrar: builderResult.totalCobrar,
+      costoPorEntrevista: builderResult.costoPorEntrevista,
+      factorComisionablePct: 1,
+      factorNoComisionablePct: 0.05,
+    },
+  });
+
+  // ✅ FIX: recalcular desde la distribución real (AMSS/Nacional) y actualizar ítems dependientes de días
+  if (
+    dto.trabajoDeCampoRealiza === true &&
+    dto.trabajoDeCampoTipo === TrabajoDeCampoTipo.PROPIO
+  ) {
+    await this.recalcularTrabajoCampoYRecursosDesdeDistribucion(cotizacion.id);
+  }
+
+  return this.findOne(cotizacion.id);
+}
 
   // ------------------------------------------------------
   // OBTENER UNA COTIZACIÓN
@@ -464,95 +475,110 @@ export class CotizacionesService {
   }
 
   // ------------------------------------------------------
-  // DISTRIBUCIÓN NACIONAL (con overrides por cotización)
+  // *** NUEVO *** DISTRIBUCIÓN GENÉRICA (AMSS o Nacional) con overrides
+  // ------------------------------------------------------
+// ------------------------------------------------------
+// *** NUEVO *** DISTRIBUCIÓN GENÉRICA (AMSS o Nacional)
+// -----------------------------------------------------
+
+async getDistribucion(cotizacionId: number) {
+  const cot = await this.prisma.cotizacion.findUnique({
+    where: { id: cotizacionId },
+    select: {
+      id: true,
+      cobertura: true,
+      studyType: true,
+      trabajoDeCampoRealiza: true,
+      trabajoDeCampoTipo: true,
+      trabajoDeCampoCosto: true,
+      totalEntrevistas: true,
+      duracionCuestionarioMin: true,
+      tipoEntrevista: true,
+      penetracionCategoria: true,
+      supervisores: true,
+      encuestadoresTotales: true,
+      realizamosCuestionario: true,
+      realizamosScript: true,
+      clienteSolicitaReporte: true,
+      clienteSolicitaInformeBI: true,
+      numeroOlasBi: true,
+    },
+  });
+  if (!cot) throw new NotFoundException('Cotización no encontrada');
+
+  const cobertura = (cot.cobertura ?? '').toUpperCase();
+  const pen =
+    cot.penetracionCategoria > 1
+      ? cot.penetracionCategoria / 100
+      : cot.penetracionCategoria;
+
+  // ➜ ENGINE INDIVIDUAL: AMSS usa su propio flujo y devuelve todo listo.
+  if (cobertura === 'AMSS') {
+    return buildDistribucionAMSS({
+      totalEntrevistas: cot.totalEntrevistas,
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      tipoEntrevista: cot.tipoEntrevista,
+      penetracionCategoria: pen,
+      cobertura: cot.cobertura,
+      supervisores: cot.supervisores,             // ← se respetan tal cual (p.ej. 8)
+      encuestadoresTotales: cot.encuestadoresTotales, // ← tal cual (p.ej. 30)
+      realizamosCuestionario: cot.realizamosCuestionario,
+      realizamosScript: cot.realizamosScript,
+      clienteSolicitaReporte: cot.clienteSolicitaReporte,
+      clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
+      numeroOlasBi: cot.numeroOlasBi ?? 2,        // fallback si viene null
+      trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo: cot.trabajoDeCampoTipo as 'propio' | 'subcontratado' | undefined,
+      trabajoDeCampoCosto: cot.trabajoDeCampoCosto ?? undefined,
+    });
+  }
+
+  // ➜ ENGINE INDIVIDUAL: NACIONAL (tu flujo actual)
+  let dist = distribuirEntrevistasNacional(cot.totalEntrevistas, cot.tipoEntrevista);
+
+  const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
+    where: { cotizacionId },
+  });
+  dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
+
+  dist = aplicarRendimientoNacional(dist, {
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    penetracion: pen,
+    totalEncuestadores: cot.encuestadoresTotales,
+    segmentSize: 20,
+    filterMinutes: 2,
+    searchMinutes: 8,
+    desplazamientoMin: 60,
+    groupSize: 4,
+  });
+
+  dist = aplicarEncuestadoresYSupervisoresNacional(
+    dist,
+    cot.encuestadoresTotales,
+    { groupSize: 4, supervisorSplit: 4 },
+  );
+
+  dist = aplicarDiasCampoYCostosNacional(dist);
+  dist = this.applyOverrides(dist, overrides, { lateOnly: true });
+
+  dist = aplicarPrecioBoletaNacional(dist, {
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    penetracion: pen,
+  });
+
+  dist = calcularTotalesViaticosTransporteHotelNacional(dist);
+  dist = calcularPagosPersonalNacional(dist);
+
+  return dist;
+}
+
+
+
+  // ------------------------------------------------------
+  // DISTRIBUCIÓN NACIONAL (compat) -> usa genérico
   // ------------------------------------------------------
   async getDistribucionNacional(cotizacionId: number) {
-    const cot = await this.prisma.cotizacion.findUnique({
-      where: { id: cotizacionId },
-      select: {
-        id: true,
-        studyType: true,
-        trabajoDeCampoRealiza: true,
-        trabajoDeCampoTipo: true,
-        trabajoDeCampoCosto: true,
-        totalEntrevistas: true,
-        duracionCuestionarioMin: true,
-        tipoEntrevista: true,
-        penetracionCategoria: true,
-        cobertura: true,
-        supervisores: true,
-        encuestadoresTotales: true,
-        realizamosCuestionario: true,
-        realizamosScript: true,
-        clienteSolicitaReporte: true,
-        clienteSolicitaInformeBI: true,
-        numeroOlasBi: true,
-      },
-    });
-
-    if (!cot) throw new NotFoundException('Cotización no encontrada');
-
-    // Base: distribución de entrevistas
-    let dist: DistribucionNacionalResult = distribuirEntrevistasNacional(
-      cot.totalEntrevistas,
-      cot.tipoEntrevista,
-    );
-
-    // Overrides guardados
-    const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
-      where: { cotizacionId },
-    });
-
-    // Pre-aplicar campos que afectan pasos siguientes (urbano/rural/total, horas/tiempo)
-    dist = this.applyOverrides(dist, overrides, {
-      earlyOnly: true,
-    });
-
-    // Resto del pipeline, respetando overrides posteriores
-    const pen =
-      cot.penetracionCategoria > 1
-        ? cot.penetracionCategoria / 100
-        : cot.penetracionCategoria;
-
-    dist = aplicarRendimientoNacional(dist, {
-      duracionCuestionarioMin: cot.duracionCuestionarioMin,
-      penetracion: pen,
-      totalEncuestadores: cot.encuestadoresTotales,
-      segmentSize: 20,
-      filterMinutes: 2,
-      searchMinutes: 8,
-      desplazamientoMin: 60,
-      groupSize: 4,
-    });
-
-    dist = aplicarEncuestadoresYSupervisoresNacional(
-      dist,
-      cot.encuestadoresTotales,
-      { groupSize: 4, supervisorSplit: 4 },
-    );
-
-    dist = aplicarDiasCampoYCostosNacional(dist);
-
-    // Re-aplicar overrides finales (rendimiento, encuestadores, supervisores, días, units, precioBoleta)
-    dist = this.applyOverrides(dist, overrides, {
-      lateOnly: true,
-    });
-
-    // Si NO hubo override de precioBoleta, aplicar tabla estándar
-    const anyPrecioOverride = dist.filas.some(
-      (f) => typeof f.precioBoleta === 'number' && !Number.isNaN(f.precioBoleta),
-    );
-    if (!anyPrecioOverride) {
-      dist = aplicarPrecioBoletaNacional(dist, {
-        duracionCuestionarioMin: cot.duracionCuestionarioMin,
-        penetracion: pen,
-      });
-    }
-
-    dist = calcularTotalesViaticosTransporteHotelNacional(dist);
-    dist = calcularPagosPersonalNacional(dist);
-
-    return dist;
+    return this.getDistribucion(cotizacionId);
   }
 
   // Aplica overrides en momentos distintos del pipeline
@@ -739,8 +765,7 @@ export class CotizacionesService {
       return;
 
     // 1) Distribución final (ya con overrides)
-    const dist = await this.getDistribucionNacional(cotizacionId);
-
+    const dist = await this.getDistribucion(cotizacionId);
     const diasCampo = Math.max(
       0,
       Math.round((dist.totalDiasCampoEncuestGlobal ?? 0) * 100) / 100,
