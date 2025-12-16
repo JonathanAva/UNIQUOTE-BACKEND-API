@@ -23,6 +23,7 @@ import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { UpdateCotizacionItemDto } from './dto/update-cotizacion-item.dto';
 import { UpdateDistribucionDto } from './dto/update-distribucion.dto';
+import { RebuildCotizacionDto } from './dto/rebuild-cotizacion.dto';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
 import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
@@ -193,6 +194,21 @@ export class CotizacionesController {
   clone(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
     const user = req.user as any;
     return this.service.clone(id, user.id);
+  }
+
+  // ✅ NUEVO: REBUILD
+  @Post(':id/rebuild')
+  @ApiOperation({
+    summary:
+      'Regenerar ítems desde los inputs actuales (o nuevos inputs). Borra items y (por defecto) overrides. Devuelve snapshot completo.',
+  })
+  rebuild(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RebuildCotizacionDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.service.rebuild(id, dto, user.id);
   }
 
   // === NUEVO (alias genérico) ===

@@ -12,7 +12,9 @@ import { CotizacionStatus } from '@prisma/client';
 import { buildCotizacionCasaPorCasa } from './builder/casa por casa/nacional.builder';
 import { UpdateDistribucionDto } from './dto/update-distribucion.dto';
 import { ConstantesService } from '@/modules/constantes/constantes.service';
+import { RebuildCotizacionDto } from './dto/rebuild-cotizacion.dto';
 import { buildDistribucionAMSS, distribuirEntrevistasAMSS } from '@/modules/cotizaciones/engine/casa-por-casa/amss.engine';
+
 
 // ✅ Pipeline por pasos para permitir overrides persistentes
 import {
@@ -261,6 +263,81 @@ export class CotizacionesService {
     return cot;
   }
 
+async getFullSnapshot(id: number) {
+  const cot = await this.prisma.cotizacion.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+
+      project: {
+        select: {
+          id: true,
+          name: true,
+          cliente: {
+            select: {
+              id: true,
+              empresa: true,
+              razonSocial: true,
+            },
+          },
+        },
+      },
+
+      contacto: true,
+      createdBy: { select: { id: true, name: true, lastName: true } },
+
+      studyType: true,
+      metodologia: true,
+
+      trabajoDeCampoRealiza: true,
+      trabajoDeCampoTipo: true,
+      trabajoDeCampoCosto: true,
+
+      numeroOlasBi: true,
+      totalEntrevistas: true,
+      duracionCuestionarioMin: true,
+      tipoEntrevista: true,
+      penetracionCategoria: true,
+      cobertura: true,
+      supervisores: true,
+      encuestadoresTotales: true,
+      realizamosCuestionario: true,
+      realizamosScript: true,
+      clienteSolicitaReporte: true,
+      clienteSolicitaInformeBI: true,
+      clienteSolicitaTablas: true,
+      incentivoTotal: true,
+
+      totalCobrar: true,
+      costoPorEntrevista: true,
+      factorComisionablePct: true,
+      factorNoComisionablePct: true,
+
+      items: { orderBy: { orden: 'asc' } },
+
+      // ✅ overrides guardados en DB
+      distribucionOverrides: { orderBy: { departamento: 'asc' } },
+
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (!cot) throw new NotFoundException('Cotización no encontrada');
+
+  // ✅ Distribución final calculada (AMSS o Nacional según cobertura)
+  const distribucion = await this.getDistribucion(id);
+
+  return {
+    cotizacion: cot,
+    distribucion,
+  };
+}
+
+
   // ------------------------------------------------------
   // LISTAR POR PROYECTO
   // ------------------------------------------------------
@@ -375,107 +452,154 @@ export class CotizacionesService {
   // ------------------------------------------------------
   // CLONAR COTIZACIÓN
   // ------------------------------------------------------
-  async clone(id: number, userId: number) {
-    const cot = await this.prisma.cotizacion.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        projectId: true,
-        contactoId: true,
-        name: true,
-        studyType: true,
-        metodologia: true,
-        trabajoDeCampoRealiza: true,
-        trabajoDeCampoTipo: true,
-        trabajoDeCampoCosto: true,
-        numeroOlasBi: true,
-        totalEntrevistas: true,
-        duracionCuestionarioMin: true,
-        tipoEntrevista: true,
-        penetracionCategoria: true,
-        cobertura: true,
-        supervisores: true,
-        encuestadoresTotales: true,
-        realizamosCuestionario: true,
-        realizamosScript: true,
-        clienteSolicitaReporte: true,
-        clienteSolicitaInformeBI: true,
-        clienteSolicitaTablas: true,
-        incentivoTotal: true,
-        factorComisionablePct: true,
-        factorNoComisionablePct: true,
-        totalCobrar: true,
-        costoPorEntrevista: true,
-        items: true,
-        status: true,
-        createdById: true,
+ async clone(id: number, userId: number) {
+  const cot = await this.prisma.cotizacion.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      projectId: true,
+      contactoId: true,
+      name: true,
+      studyType: true,
+      metodologia: true,
+      trabajoDeCampoRealiza: true,
+      trabajoDeCampoTipo: true,
+      trabajoDeCampoCosto: true,
+      numeroOlasBi: true,
+      totalEntrevistas: true,
+      duracionCuestionarioMin: true,
+      tipoEntrevista: true,
+      penetracionCategoria: true,
+      cobertura: true,
+      supervisores: true,
+      encuestadoresTotales: true,
+      realizamosCuestionario: true,
+      realizamosScript: true,
+      clienteSolicitaReporte: true,
+      clienteSolicitaInformeBI: true,
+      clienteSolicitaTablas: true,
+      incentivoTotal: true,
+      factorComisionablePct: true,
+      factorNoComisionablePct: true,
+      totalCobrar: true,
+      costoPorEntrevista: true,
+      items: true,
+
+      // ✅ NUEVO: clonar también overrides de distribución
+      distribucionOverrides: true,
+
+      status: true,
+      createdById: true,
+    },
+  });
+
+  if (!cot) throw new NotFoundException('Cotización no encontrada');
+
+  if (cot.status !== CotizacionStatus.APROBADO) {
+    throw new BadRequestException('Solo se pueden clonar cotizaciones aprobadas');
+  }
+
+  const code = await this.generateCotizacionCode(cot.projectId);
+
+  const nueva = await this.prisma.$transaction(async (tx) => {
+    const creada = await tx.cotizacion.create({
+      data: {
+        projectId: cot.projectId,
+        contactoId: cot.contactoId,
+        name: `${cot.name} (copia)`,
+        code,
+        status: CotizacionStatus.ENVIADO,
+        createdById: userId,
+
+        studyType: cot.studyType,
+        metodologia: cot.metodologia,
+        trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
+        trabajoDeCampoTipo: cot.trabajoDeCampoTipo,
+        trabajoDeCampoCosto: cot.trabajoDeCampoCosto,
+        numeroOlasBi: cot.numeroOlasBi,
+
+        totalEntrevistas: cot.totalEntrevistas,
+        duracionCuestionarioMin: cot.duracionCuestionarioMin,
+        tipoEntrevista: cot.tipoEntrevista,
+        penetracionCategoria: cot.penetracionCategoria,
+        cobertura: cot.cobertura,
+        supervisores: cot.supervisores,
+        encuestadoresTotales: cot.encuestadoresTotales,
+        realizamosCuestionario: cot.realizamosCuestionario,
+        realizamosScript: cot.realizamosScript,
+        clienteSolicitaReporte: cot.clienteSolicitaReporte,
+        clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
+        clienteSolicitaTablas: cot.clienteSolicitaTablas,
+        incentivoTotal: cot.incentivoTotal,
+
+        // Copiar factores/totales tal cual (si quieres recalcular después, no pasa nada)
+        factorComisionablePct: cot.factorComisionablePct,
+        factorNoComisionablePct: cot.factorNoComisionablePct,
+        totalCobrar: cot.totalCobrar,
+        costoPorEntrevista: cot.costoPorEntrevista,
       },
     });
 
-    if (!cot) throw new NotFoundException('Cotización no encontrada');
-    if (cot.status !== CotizacionStatus.APROBADO) {
-      throw new BadRequestException('Solo se pueden clonar cotizaciones aprobadas');
+    // ✅ Copiar items (mapeo explícito, más seguro que ...i)
+    if (cot.items.length > 0) {
+      await tx.cotizacionItem.createMany({
+        data: cot.items.map((i) => ({
+          cotizacionId: creada.id,
+          category: i.category,
+          description: i.description,
+          personas: i.personas,
+          dias: i.dias,
+          costoUnitario: i.costoUnitario,
+          costoTotal: i.costoTotal,
+          comisionable: i.comisionable,
+          totalConComision: i.totalConComision,
+          orden: i.orden,
+        })),
+      });
     }
 
-    const code = await this.generateCotizacionCode(cot.projectId);
-
-    const clone = await this.prisma.$transaction(async (tx) => {
-      const nueva = await tx.cotizacion.create({
-        data: {
-          projectId: cot.projectId,
-          contactoId: cot.contactoId,
-          name: `${cot.name} (copia)`,
-          code,
-          status: CotizacionStatus.ENVIADO,
-          createdById: userId,
-
-          studyType: cot.studyType,
-          metodologia: cot.metodologia,
-          trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
-          trabajoDeCampoTipo: cot.trabajoDeCampoTipo,
-          trabajoDeCampoCosto: cot.trabajoDeCampoCosto,
-          numeroOlasBi: cot.numeroOlasBi,
-
-          totalEntrevistas: cot.totalEntrevistas,
-          duracionCuestionarioMin: cot.duracionCuestionarioMin,
-          tipoEntrevista: cot.tipoEntrevista,
-          penetracionCategoria: cot.penetracionCategoria,
-          cobertura: cot.cobertura,
-          supervisores: cot.supervisores,
-          encuestadoresTotales: cot.encuestadoresTotales,
-          realizamosCuestionario: cot.realizamosCuestionario,
-          realizamosScript: cot.realizamosScript,
-          clienteSolicitaReporte: cot.clienteSolicitaReporte,
-          clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
-
-          clienteSolicitaTablas: cot.clienteSolicitaTablas,
-
-          incentivoTotal: cot.incentivoTotal,
-          factorComisionablePct: cot.factorComisionablePct,
-          factorNoComisionablePct: cot.factorNoComisionablePct,
-          totalCobrar: cot.totalCobrar,
-          costoPorEntrevista: cot.costoPorEntrevista,
-        },
+    // ✅ Copiar overrides (si existen)
+    if (cot.distribucionOverrides.length > 0) {
+      await tx.cotizacionDistribucionOverride.createMany({
+        data: cot.distribucionOverrides.map((o) => ({
+          cotizacionId: creada.id,
+          departamento: o.departamento,
+          urbano: o.urbano,
+          rural: o.rural,
+          total: o.total,
+          horasEfectivas: o.horasEfectivas,
+          tiempoEfectivoMin: o.tiempoEfectivoMin,
+          rendimiento: o.rendimiento,
+          encuestadores: o.encuestadores,
+          supervisores: o.supervisores,
+          diasCampoEncuest: o.diasCampoEncuest,
+          viaticosUnit: o.viaticosUnit,
+          tMicrobusUnit: o.tMicrobusUnit,
+          hotelUnit: o.hotelUnit,
+          precioBoleta: o.precioBoleta,
+        })),
       });
+    }
 
-      if (cot.items.length > 0) {
-        await tx.cotizacionItem.createMany({
-          data: cot.items.map((i) => ({
-            ...i,
-            id: undefined as unknown as number,
-            cotizacionId: nueva.id,
-          })),
-        });
-      }
+    return creada;
+  });
 
-      return nueva;
-    });
-
-    return this.findOne(clone.id);
+  // ✅ RECOMENDADO: si es AMSS + propio, recalcular para no arrastrar el bug de 12 días
+  // (Si querés que aplique también a Nacional, quitá el check de cobertura)
+  const cobertura = (cot.cobertura ?? '').trim().toUpperCase();
+  if (
+    cobertura === 'AMSS' &&
+    cot.trabajoDeCampoRealiza === true &&
+    cot.trabajoDeCampoTipo === 'propio'
+  ) {
+    await this.recalcularTrabajoCampoYRecursosDesdeDistribucion(nueva.id);
   }
 
-  // ------------------------------------------------------
-  // *** NUEVO *** DISTRIBUCIÓN GENÉRICA (AMSS o Nacional) con overrides
+  return this.findOne(nueva.id);
+}
+
+
+
   // ------------------------------------------------------
 // ------------------------------------------------------
 // *** NUEVO *** DISTRIBUCIÓN GENÉRICA (AMSS o Nacional)
@@ -1311,6 +1435,252 @@ async getDistribucion(cotizacionId: number) {
       },
     });
   }
+
+async rebuild(cotizacionId: number, dto: RebuildCotizacionDto, userId: number) {
+  const current = await this.prisma.cotizacion.findUnique({
+    where: { id: cotizacionId },
+    select: {
+      id: true,
+      createdById: true,
+      status: true,
+
+      projectId: true,
+      contactoId: true,
+      name: true,
+      studyType: true,
+      metodologia: true,
+
+      trabajoDeCampoRealiza: true,
+      trabajoDeCampoTipo: true,
+      trabajoDeCampoCosto: true,
+
+      numeroOlasBi: true,
+      totalEntrevistas: true,
+      duracionCuestionarioMin: true,
+      tipoEntrevista: true,
+      penetracionCategoria: true,
+      cobertura: true,
+      supervisores: true,
+      encuestadoresTotales: true,
+
+      clienteSolicitaTablas: true,
+      realizamosCuestionario: true,
+      realizamosScript: true,
+      clienteSolicitaReporte: true,
+      clienteSolicitaInformeBI: true,
+      incentivoTotal: true,
+
+      factorComisionablePct: true,
+      factorNoComisionablePct: true,
+    },
+  });
+
+  if (!current) throw new NotFoundException('Cotización no encontrada');
+
+  if (
+    current.status === CotizacionStatus.APROBADO ||
+    current.status === CotizacionStatus.NO_APROBADO
+  ) {
+    throw new BadRequestException(
+      'No se puede regenerar una cotización aprobada o no aprobada',
+    );
+  }
+
+  if (current.createdById !== userId) {
+    throw new ForbiddenException(
+      'Solo el usuario que creó la cotización puede regenerarla',
+    );
+  }
+
+  const merged: any = {
+    ...current,
+    ...dto,
+    contactoId:
+      dto.contactoId !== undefined ? dto.contactoId : current.contactoId,
+    metodologia:
+      dto.metodologia !== undefined ? dto.metodologia : current.metodologia,
+    incentivoTotal:
+      dto.incentivoTotal !== undefined ? dto.incentivoTotal : current.incentivoTotal,
+  };
+
+  // Validación cualitativo
+  if (
+    String(merged.studyType ?? '').toLowerCase() === 'cualitativo' &&
+    !merged.metodologia
+  ) {
+    throw new BadRequestException(
+      'Debe seleccionar una metodología si el estudio es cualitativo',
+    );
+  }
+
+  // Validación trabajo de campo
+  const tdcRealiza = merged.trabajoDeCampoRealiza === true;
+  const tdcTipo = merged.trabajoDeCampoTipo ?? null;
+
+  if (tdcRealiza && (tdcTipo !== 'propio' && tdcTipo !== 'subcontratado')) {
+    throw new BadRequestException(
+      'trabajoDeCampoTipo es requerido cuando trabajoDeCampoRealiza es true',
+    );
+  }
+
+  if (tdcRealiza && tdcTipo === 'subcontratado') {
+    const costo = Number(merged.trabajoDeCampoCosto ?? 0);
+    if (!Number.isFinite(costo) || costo <= 0) {
+      throw new BadRequestException(
+        'trabajoDeCampoCosto debe ser > 0 cuando trabajoDeCampoTipo es subcontratado',
+      );
+    }
+  }
+
+  // Normalizar penetración (0..1)
+  let penetracion: number;
+  const penIn = merged.penetracionCategoria as any;
+
+  if (typeof penIn === 'string') {
+    const value = penIn.trim().toLowerCase();
+    if (value === 'fácil' || value === 'facil') penetracion = 0.85;
+    else if (value === 'medio') penetracion = 0.6;
+    else if (value === 'difícil' || value === 'dificil') penetracion = 0.35;
+    else if (value.endsWith('%')) penetracion = parseFloat(value) / 100;
+    else penetracion = parseFloat(value);
+  } else {
+    penetracion = Number(penIn);
+  }
+
+  if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+    throw new BadRequestException(
+      'penetracionCategoria debe ser un número válido entre 0.01 y 1.00, o usar: fácil / medio / difícil / porcentaje',
+    );
+  }
+
+  const factorComisionable = Number(current.factorComisionablePct ?? 1);
+  const factorNoComisionable = Number(current.factorNoComisionablePct ?? 0.05);
+
+  const builderResult = await buildCotizacionCasaPorCasa(
+    {
+      totalEntrevistas: Number(merged.totalEntrevistas),
+      duracionCuestionarioMin: Number(merged.duracionCuestionarioMin),
+      tipoEntrevista: String(merged.tipoEntrevista),
+      penetracionCategoria: penetracion,
+      cobertura: String(merged.cobertura),
+      supervisores: Number(merged.supervisores),
+      encuestadoresTotales: Number(merged.encuestadoresTotales),
+
+      realizamosCuestionario: Boolean(merged.realizamosCuestionario),
+      realizamosScript: Boolean(merged.realizamosScript),
+      clienteSolicitaReporte: Boolean(merged.clienteSolicitaReporte),
+      clienteSolicitaInformeBI: Boolean(merged.clienteSolicitaInformeBI),
+
+      numeroOlasBi: Number(merged.numeroOlasBi ?? 2),
+      clienteSolicitaTablas: merged.clienteSolicitaTablas === true,
+
+      trabajoDeCampoRealiza: Boolean(merged.trabajoDeCampoRealiza),
+      trabajoDeCampoTipo:
+        merged.trabajoDeCampoTipo === 'propio' ||
+        merged.trabajoDeCampoTipo === 'subcontratado'
+          ? merged.trabajoDeCampoTipo
+          : undefined,
+      trabajoDeCampoCosto: merged.trabajoDeCampoCosto ?? undefined,
+
+      incentivoTotal: merged.incentivoTotal ?? undefined,
+
+      factorComisionable,
+      factorNoComisionable,
+    },
+    this.constantesService,
+  );
+
+  const keepOverrides = dto.keepDistribucionOverrides === true;
+
+  await this.prisma.$transaction(async (tx) => {
+    await tx.cotizacion.update({
+      where: { id: cotizacionId },
+      data: {
+        name: merged.name ?? undefined,
+        contactoId: merged.contactoId ?? null,
+
+        studyType: merged.studyType ?? undefined,
+        metodologia: merged.metodologia ?? null,
+
+        trabajoDeCampoRealiza: Boolean(merged.trabajoDeCampoRealiza),
+        trabajoDeCampoTipo: merged.trabajoDeCampoTipo ?? null,
+        trabajoDeCampoCosto:
+          merged.trabajoDeCampoCosto === null || merged.trabajoDeCampoCosto === undefined
+            ? null
+            : Number(merged.trabajoDeCampoCosto),
+
+        numeroOlasBi: merged.numeroOlasBi ?? null,
+
+        totalEntrevistas: Number(merged.totalEntrevistas),
+        duracionCuestionarioMin: Number(merged.duracionCuestionarioMin),
+        tipoEntrevista: String(merged.tipoEntrevista),
+        penetracionCategoria: penetracion as any,
+        cobertura: String(merged.cobertura),
+
+        supervisores: Number(merged.supervisores),
+        encuestadoresTotales: Number(merged.encuestadoresTotales),
+
+        clienteSolicitaTablas: merged.clienteSolicitaTablas ?? false,
+
+        realizamosCuestionario: Boolean(merged.realizamosCuestionario),
+        realizamosScript: Boolean(merged.realizamosScript),
+        clienteSolicitaReporte: Boolean(merged.clienteSolicitaReporte),
+        clienteSolicitaInformeBI: Boolean(merged.clienteSolicitaInformeBI),
+
+        incentivoTotal:
+          merged.incentivoTotal === null || merged.incentivoTotal === undefined
+            ? null
+            : Number(merged.incentivoTotal),
+
+        factorComisionablePct: factorComisionable,
+        factorNoComisionablePct: factorNoComisionable,
+      },
+    });
+
+    if (!keepOverrides) {
+      await tx.cotizacionDistribucionOverride.deleteMany({
+        where: { cotizacionId },
+      });
+    }
+
+    await tx.cotizacionItem.deleteMany({
+      where: { cotizacionId },
+    });
+
+    if (builderResult.items.length > 0) {
+      await tx.cotizacionItem.createMany({
+        data: builderResult.items.map((item) => ({
+          cotizacionId,
+          category: item.category,
+          description: item.description,
+          personas: item.personas,
+          dias: item.dias,
+          costoUnitario: item.costoUnitario,
+          costoTotal: item.costoTotal,
+          comisionable: item.comisionable,
+          totalConComision: item.totalConComision,
+          orden: item.orden,
+        })),
+      });
+    }
+
+    await tx.cotizacion.update({
+      where: { id: cotizacionId },
+      data: {
+        totalCobrar: builderResult.totalCobrar,
+        costoPorEntrevista: builderResult.costoPorEntrevista,
+      },
+    });
+  });
+
+  // ✅ Sincroniza ítems dependientes de días con distribución real (AMSS/Nacional)
+  await this.recalcularTrabajoCampoYRecursosDesdeDistribucion(cotizacionId);
+
+  // ✅ Devuelve “absolutamente todo”
+  return this.getFullSnapshot(cotizacionId);
+}
+
+
 
   // Cotizaciones creadas por un usuario
   async findByUser(userId: number) {
