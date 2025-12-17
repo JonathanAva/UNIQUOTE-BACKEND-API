@@ -20,6 +20,8 @@ import { ConstantesService } from '@/modules/constantes/constantes.service';
 import { RebuildCotizacionDto } from './dto/rebuild-cotizacion.dto';
 import { buildDistribucionAMSS } from '@/modules/cotizaciones/engine/casa-por-casa/amss.engine';
 import { distribuirEntrevistasUrbano } from '@/modules/cotizaciones/engine/casa-por-casa/urbano.engine';
+import { distribuirEntrevistasCiudadesPrincipales } from '@/modules/cotizaciones/engine/casa-por-casa/ciudades-principales.engine';
+
 
 // ✅ Pipeline por pasos para permitir overrides persistentes
 import {
@@ -856,6 +858,55 @@ export class CotizacionesService {
 
       return dist;
     }
+
+    // ➜ ENGINE: CIUDADES PRINCIPALES (50% urbano / 50% rural)
+if (
+  cobertura === 'CIU_PRINCIPALES' ||
+  cobertura === 'CIUDADES_PRINCIPALES' ||
+  cobertura === 'CIUDADES PRINCIPALES' ||
+  cobertura === 'CIU. PRINCIPALES'
+) {
+  let dist = distribuirEntrevistasCiudadesPrincipales(
+    cot.totalEntrevistas,
+    cot.tipoEntrevista,
+  );
+
+  const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
+    where: { cotizacionId },
+  });
+  dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
+
+  dist = aplicarRendimientoNacional(dist, {
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    penetracion: pen,
+    totalEncuestadores: cot.encuestadoresTotales,
+    segmentSize: 20,
+    filterMinutes: 2,
+    searchMinutes: 8,
+    desplazamientoMin: 60, // ✅ aquí vuelve a 60
+    groupSize: 4,
+  });
+
+  dist = aplicarEncuestadoresYSupervisoresNacional(
+    dist,
+    cot.encuestadoresTotales,
+    { groupSize: 4, supervisorSplit: 4 },
+  );
+
+  dist = aplicarDiasCampoYCostosNacional(dist);
+  dist = this.applyOverrides(dist, overrides, { lateOnly: true });
+
+  dist = aplicarPrecioBoletaNacional(dist, {
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    penetracion: pen,
+  });
+
+  dist = calcularTotalesViaticosTransporteHotelNacional(dist);
+  dist = calcularPagosPersonalNacional(dist);
+
+  return dist;
+}
+
 
     // ➜ ENGINE: AMSS
     if (cobertura === 'AMSS') {

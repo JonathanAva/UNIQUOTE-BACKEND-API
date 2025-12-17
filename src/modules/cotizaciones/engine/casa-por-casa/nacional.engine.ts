@@ -219,6 +219,12 @@ export interface DistribucionDepartamento {
   rural: number;
   total: number;
 
+    // % de distribución (para columnas de la tabla)
+  pctUrbano?: number;
+  pctRural?: number;
+  pctTotal?: number;
+
+
   // Horas / minutos efectivos
   horasEfectivas: number;
   tiempoEfectivoMin: number;
