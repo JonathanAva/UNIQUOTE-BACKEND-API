@@ -187,6 +187,30 @@ export class CotizacionesController {
     return this.service.updateStatus(id, dto, user.id);
   }
 
+  @Get('stats/ultimos-6-meses')
+  @ApiOperation({
+    summary: 'Cotizaciones: Total vs Aprobadas/No aprobadas (últimos 6 meses)',
+  })
+  getStatsUltimos6Meses() {
+    return this.service.getStatsUltimos6Meses();
+  }
+
+  @Get('stats/actividad-semanal')
+  @ApiOperation({
+    summary: 'Cotizaciones creadas esta semana por día (Lun-Vie)',
+  })
+  @ApiQuery({
+    name: 'weekOffset',
+    required: false,
+    type: Number,
+    description: '0 = semana actual, -1 = semana pasada, etc.',
+  })
+  getActividadSemanal(@Query('weekOffset') weekOffset?: string) {
+    const offset = weekOffset != null ? Number(weekOffset) : 0;
+    return this.service.getActividadSemanal(Number.isFinite(offset) ? offset : 0);
+  }
+
+
   @Post(':id/clone')
   @ApiOperation({
     summary: 'Clonar una cotización (solo si está en estado aprobado) como borrador',

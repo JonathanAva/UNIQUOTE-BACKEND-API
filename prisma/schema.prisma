@@ -199,7 +199,7 @@ model Cotizacion {
   realizamosScript         Boolean
   clienteSolicitaReporte   Boolean
   clienteSolicitaInformeBI Boolean
-  clienteSolicitaTablas    Boolean? // opcional; default null/false si prefieres
+  clienteSolicitaTablas    Boolean?
   incentivoTotal           Int?
 
   // Totales
@@ -219,11 +219,13 @@ model Cotizacion {
   createdById Int
 
   items                 CotizacionItem[]
-  // ←← Campo inverso nuevo para overrides de distribución
   distribucionOverrides CotizacionDistribucionOverride[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 // =====================================================

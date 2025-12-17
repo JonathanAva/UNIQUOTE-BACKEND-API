@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/infra/database/prisma.service';
 import { CreateCotizacionDto, TrabajoDeCampoTipo } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
@@ -1732,7 +1733,7 @@ async rebuild(cotizacionId: number, dto: RebuildCotizacionDto, userId: number) {
     });
   }
 
-  // Cotizaciones por cliente
+ 
   async findByCliente(clienteId: number) {
     return this.prisma.cotizacion.findMany({
       where: {
@@ -1777,4 +1778,92 @@ async rebuild(cotizacionId: number, dto: RebuildCotizacionDto, userId: number) {
     });
     return { status, total };
   }
+
+  async getStatsUltimos6Meses() {
+  type Row = {
+    month: string;
+    total: bigint;
+    aprobadas: bigint;
+    no_aprobadas: bigint;
+  };
+
+  const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+    WITH months AS (
+      SELECT
+        date_trunc('month', (now() AT TIME ZONE 'America/El_Salvador')) - interval '5 months'
+        + (n || ' months')::interval AS month_local
+      FROM generate_series(0, 5) AS n
+    ),
+    bounds AS (
+      SELECT
+        month_local,
+        (month_local AT TIME ZONE 'America/El_Salvador') AS start_ts,
+        ((month_local + interval '1 month') AT TIME ZONE 'America/El_Salvador') AS end_ts
+      FROM months
+    )
+    SELECT
+      to_char(b.month_local, 'YYYY-MM') AS month,
+      COALESCE(count(c.id), 0) AS total,
+      COALESCE(count(c.id) FILTER (WHERE c.status = 'APROBADO'), 0) AS aprobadas,
+      COALESCE(count(c.id) FILTER (WHERE c.status = 'NO_APROBADO'), 0) AS no_aprobadas
+    FROM bounds b
+    LEFT JOIN "Cotizacion" c
+      ON c."createdAt" >= b.start_ts
+     AND c."createdAt" <  b.end_ts
+    GROUP BY b.month_local
+    ORDER BY b.month_local;
+  `);
+
+  return rows.map((r) => ({
+    month: r.month, // "2025-01"
+    total: Number(r.total),
+    aprobadas: Number(r.aprobadas),
+    noAprobadas: Number(r.no_aprobadas),
+  }));
+}
+
+async getActividadSemanal(weekOffset = 0) {
+  type Row = {
+    idx: number;
+    date: string;
+    total: bigint;
+  };
+
+  const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+    WITH params AS (
+      SELECT (date_trunc('week', (now() AT TIME ZONE 'America/El_Salvador')) + (${weekOffset} * interval '1 week')) AS week_local
+    ),
+    days AS (
+      SELECT
+        n AS idx,
+        (p.week_local + (n || ' days')::interval) AS day_local,
+        ((p.week_local + (n || ' days')::interval) AT TIME ZONE 'America/El_Salvador') AS start_ts,
+        ((p.week_local + (n || ' days')::interval + interval '1 day') AT TIME ZONE 'America/El_Salvador') AS end_ts
+      FROM params p, generate_series(0, 4) AS n
+    )
+    SELECT
+      d.idx,
+      to_char(d.day_local, 'YYYY-MM-DD') AS date,
+      COALESCE(count(c.id), 0) AS total
+    FROM days d
+    LEFT JOIN "Cotizacion" c
+      ON c."createdAt" >= d.start_ts
+     AND c."createdAt" <  d.end_ts
+    GROUP BY d.idx, d.day_local
+    ORDER BY d.idx;
+  `);
+
+  const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+
+  return {
+    weekOffset,
+    days: rows.map((r) => ({
+      day: labels[r.idx] ?? `D${r.idx}`,
+      date: r.date,
+      total: Number(r.total),
+    })),
+  };
+}
+
+
 }
