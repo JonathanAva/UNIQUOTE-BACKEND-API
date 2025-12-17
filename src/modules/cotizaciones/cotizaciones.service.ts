@@ -706,90 +706,106 @@ async getDistribucion(cotizacionId: number) {
   }
 
   // Aplica overrides en momentos distintos del pipeline
-  private applyOverrides(
-    base: DistribucionNacionalResult,
-    overrides: Array<{
-      departamento: string;
-      urbano?: number | null;
-      rural?: number | null;
-      total?: number | null;
-      horasEfectivas?: number | null;
-      tiempoEfectivoMin?: number | null;
-      rendimiento?: number | null;
-      encuestadores?: number | null;
-      supervisores?: number | null;
-      diasCampoEncuest?: number | null;
-      viaticosUnit?: number | null;
-      tMicrobusUnit?: number | null;
-      hotelUnit?: number | null;
-      precioBoleta?: number | null;
-    }>,
-    opts?: { earlyOnly?: boolean; lateOnly?: boolean },
-  ): DistribucionNacionalResult {
-    const early = Boolean(opts?.earlyOnly);
-    const late = Boolean(opts?.lateOnly);
+private applyOverrides(
+  base: DistribucionNacionalResult,
+  overrides: Array<{
+    departamento: string;
+    urbano?: number | null;
+    rural?: number | null;
+    total?: number | null;
+    horasEfectivas?: number | null;
+    tiempoEfectivoMin?: number | null;
+    rendimiento?: number | null;
+    encuestadores?: number | null;
+    supervisores?: number | null;
+    diasCampoEncuest?: number | null;
+    viaticosUnit?: number | null;
+    tMicrobusUnit?: number | null;
+    hotelUnit?: number | null;
+    precioBoleta?: number | null;
+  }>,
+  opts?: { earlyOnly?: boolean; lateOnly?: boolean },
+): DistribucionNacionalResult {
+  const early = Boolean(opts?.earlyOnly);
+  const late = Boolean(opts?.lateOnly);
 
-    const map = new Map(overrides.map((o) => [o.departamento, o]));
+  const map = new Map(overrides.map((o) => [o.departamento, o]));
 
-    let totalDias = 0;
+  let totalDias = 0;
 
-    const filas = base.filas.map((fila) => {
-      const o = map.get(fila.departamento);
-      if (!o) return fila;
+  const filas = base.filas.map((fila) => {
+    const o = map.get(fila.departamento);
 
-      const next = { ...fila };
+    // siempre partimos del estado actual
+    const next: any = { ...fila };
 
-      // EARLY: afectan cálculos iniciales
-      if (!late) {
-        if (o.urbano != null) next.urbano = Number(o.urbano);
-        if (o.rural != null) next.rural = Number(o.rural);
-        if (o.total != null) next.total = Number(o.total);
-        else if (o.urbano != null || o.rural != null) {
-          next.total = (o.urbano ?? next.urbano ?? 0) + (o.rural ?? next.rural ?? 0);
-        }
-        if (o.horasEfectivas != null) next.horasEfectivas = Number(o.horasEfectivas);
-        if (o.tiempoEfectivoMin != null) next.tiempoEfectivoMin = Number(o.tiempoEfectivoMin);
+    // =========================
+    // EARLY (antes del pipeline)
+    // =========================
+    if (!late && o) {
+      if (o.urbano != null) next.urbano = Number(o.urbano);
+      if (o.rural != null) next.rural = Number(o.rural);
+
+      if (o.total != null) next.total = Number(o.total);
+      else if (o.urbano != null || o.rural != null) {
+        next.total = (o.urbano ?? next.urbano ?? 0) + (o.rural ?? next.rural ?? 0);
       }
 
-      // LATE: pisan resultados del pipeline
-      if (!early) {
-        if (o.rendimiento != null) next.rendimiento = Number(o.rendimiento);
-        if (o.encuestadores != null) next.encuestadores = Number(o.encuestadores);
-        if (o.supervisores != null) next.supervisores = Number(o.supervisores);
-        if (o.diasCampoEncuest != null) next.diasCampoEncuest = Number(o.diasCampoEncuest);
+      if (o.horasEfectivas != null) next.horasEfectivas = Number(o.horasEfectivas);
+      if (o.tiempoEfectivoMin != null) next.tiempoEfectivoMin = Number(o.tiempoEfectivoMin);
+    }
 
-        if (o.viaticosUnit != null) next.viaticosUnit = Number(o.viaticosUnit);
-        if (o.tMicrobusUnit != null) next.tMicrobusUnit = Number(o.tMicrobusUnit);
-        if (o.hotelUnit != null) next.hotelUnit = Number(o.hotelUnit);
+    // =========================
+    // LATE (después del pipeline)
+    // =========================
+    if (!early && o) {
+      if (o.rendimiento != null) next.rendimiento = Number(o.rendimiento);
+      if (o.encuestadores != null) next.encuestadores = Number(o.encuestadores);
+      if (o.supervisores != null) next.supervisores = Number(o.supervisores);
+      if (o.diasCampoEncuest != null) next.diasCampoEncuest = Number(o.diasCampoEncuest);
 
-        if (o.precioBoleta != null) next.precioBoleta = Number(o.precioBoleta);
+      if (o.viaticosUnit != null) next.viaticosUnit = Number(o.viaticosUnit);
+      if (o.tMicrobusUnit != null) next.tMicrobusUnit = Number(o.tMicrobusUnit);
+      if (o.hotelUnit != null) next.hotelUnit = Number(o.hotelUnit);
+
+      if (o.precioBoleta != null) next.precioBoleta = Number(o.precioBoleta);
+    }
+
+    // =========================
+    // Recalcular días si estamos en etapa LATE
+    // y no hay override explícito de diasCampoEncuest
+    // =========================
+    if (!early) {
+      // Si no hay override de días (o no existe override), aseguramos que existan días válidos
+      // usando la fórmula Excel:
+      // =IFERROR((Q/(T*U))*1.05," ")
+      if (o?.diasCampoEncuest == null && (next.diasCampoEncuest == null || next.diasCampoEncuest === 0)) {
+        const Q = Number(next.total ?? 0);
+        const T = Number(next.rendimiento ?? 0);
+        const U = Number(next.encuestadores ?? 0);
+        if (Q > 0 && T > 0 && U > 0) {
+          next.diasCampoEncuest = (Q / (T * U)) * 1.05;
+        }
       }
 
-      // Recalcular días si NO hay override explícito y existen Q/T/U válidos
-      if (!early) {
-        if (o?.diasCampoEncuest == null) {
-          const Q = Number(next.total ?? 0);
-          const T = Number(next.rendimiento ?? 0);
-          const U = Number(next.encuestadores ?? 0);
-          if (Q > 0 && T > 0 && U > 0) {
-            next.diasCampoEncuest = (Q / (T * U)) * 1.05;
-          }
-        }
-        if (typeof next.diasCampoEncuest === 'number') {
-          totalDias += next.diasCampoEncuest;
-        }
+      // ✅ SIEMPRE sumar días, exista override o no
+      if (typeof next.diasCampoEncuest === 'number' && Number.isFinite(next.diasCampoEncuest)) {
+        totalDias += next.diasCampoEncuest;
       }
+    }
 
-      return next;
-    });
+    return next;
+  });
 
-    return {
-      ...base,
-      filas,
-      totalDiasCampoEncuestGlobal:
-        !early && late ? Math.ceil(totalDias) : base.totalDiasCampoEncuestGlobal,
-    };
-  }
+  return {
+    ...base,
+    filas,
+    // Solo recalculamos el total global en el paso LATE
+    totalDiasCampoEncuestGlobal:
+      !early && late ? Math.ceil(totalDias) : base.totalDiasCampoEncuestGlobal,
+  };
+}
+
 
   // ------------------------------------------------------
   // EDITAR / RESET DISTRIBUCIÓN NACIONAL (guardar overrides + recalcular)
