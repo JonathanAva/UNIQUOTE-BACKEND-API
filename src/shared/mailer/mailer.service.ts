@@ -1,6 +1,8 @@
+// src/modules/mailer/mailer.service.ts
+
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer from 'nodemailer';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 // Servicio encargado de enviar correos usando Nodemailer
@@ -10,33 +12,72 @@ export class MailerService {
   private readonly logger = new Logger(MailerService.name);
 
   constructor(private readonly config: ConfigService) {
+    // -------------------------------------------------------------------------
     // Lectura de configuración SMTP desde variables de entorno
-    const host = this.config.get<string>('SMTP_HOST');
-    const port = parseInt(this.config.get<string>('SMTP_PORT') ?? '587', 10);
-    const secure = (this.config.get<string>('SMTP_SECURE') ?? 'false') === 'true';
-    const user = this.config.get<string>('SMTP_USER');
-    const pass = this.config.get<string>('SMTP_PASS');
+    // -------------------------------------------------------------------------
+    const host = this.config.get<string>('SMTP_HOST') ?? 'smtp.office365.com';
+    const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
+
+    // ✅ En Office365: 587 = STARTTLS (secure false). 465 = SSL (secure true)
+    const secure = port === 465;
+
+    const user = this.config.get<string>('SMTP_USER') ?? '';
+    const pass = this.config.get<string>('SMTP_PASS') ?? '';
 
     // Si no especificas EMAIL_FROM, usa el mismo del usuario autenticado
-    this.from = this.config.get<string>('EMAIL_FROM') || user || 'no-reply@example.com';
+    // ✅ Nota: Office365 suele exigir que el "from" sea el mismo mailbox autenticado.
+    this.from =
+      this.config.get<string>('EMAIL_FROM') ||
+      (user ? `Unimer El Salvador <${user}>` : 'no-reply@example.com');
 
-    // Crea el transport de Nodemailer
+    // ✅ MUY IMPORTANTE: EHLO/HELO válido (evita 503 Bad sequence of commands en Exchange)
+    const ehloName =
+      this.config.get<string>('SMTP_EHLO_NAME') ??
+      'unimerelsalvador.com'; // puedes cambiarlo a "api.unimerelsalvador.com" o "localhost"
+
+    // -------------------------------------------------------------------------
+    // Transport (Office365 / Exchange Online)
+    // -------------------------------------------------------------------------
     this.transporter = nodemailer.createTransport({
       host,
       port,
-      secure, // true para 465, false para 587
-      auth: { user, pass }, // Credenciales SMTP
+      secure, // 587=false (STARTTLS), 465=true (SSL)
+      auth: { user, pass },
 
-      // ✅ Recomendación: en PROD ponelo en false para no generar logs extra
+      // ✅ Exchange a veces rechaza EHLO con hostname raro (Windows / underscores).
+      name: ehloName,
+
+      // ✅ Para 587 fuerza STARTTLS antes de AUTH
+      requireTLS: false,
+
+      // A veces ayuda con Exchange
+      authMethod: 'LOGIN',
+
+      tls: {
+        minVersion: 'TLSv1.2',
+        servername: host, // ✅ importante en algunos entornos
+        rejectUnauthorized: true, // ✅ Office365 debe ir true
+      },
+
+      // Timeouts razonables
+      connectionTimeout: 20_000,
+      greetingTimeout: 20_000,
+      socketTimeout: 30_000,
+
+      // Logs (en PROD puedes apagarlo)
       logger: true,
       debug: true,
-
-      requireTLS: !secure, // fuerza STARTTLS si va por 587
-      tls: {
-        // En dev a veces conviene permitir self-signed; en prod se recomienda quitarlo
-        rejectUnauthorized: false,
-      },
     });
+
+    // ✅ Esto te imprime si el SMTP conecta/auth o por qué falla
+    this.transporter
+      .verify()
+      .then(() => this.logger.log('SMTP listo ✅'))
+      .catch((e: any) => {
+        this.logger.error(
+          `SMTP verify falló ❌ code=${e?.code} responseCode=${e?.responseCode} command=${e?.command} response=${e?.response ?? e?.message ?? e}`,
+        );
+      });
   }
 
   // ---------------------------------------------------------------------------
@@ -76,9 +117,18 @@ export class MailerService {
     const companyName = this.config.get<string>('COMPANY_NAME') ?? appName;
     const website = this.config.get<string>('COMPANY_WEBSITE') ?? '';
     const address = this.config.get<string>('COMPANY_ADDRESS') ?? '';
-    const supportEmail = this.config.get<string>('SUPPORT_EMAIL') ?? 'soporte@uniquote.com';
+    const supportEmail =
+      this.config.get<string>('SUPPORT_EMAIL') ?? 'soporte@unimerelsalvador.com';
 
-    return { appName, brandColor, brandLogoUrl, companyName, website, address, supportEmail };
+    return {
+      appName,
+      brandColor,
+      brandLogoUrl,
+      companyName,
+      website,
+      address,
+      supportEmail,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -89,16 +139,25 @@ export class MailerService {
   async sendEmail(to: string, subject: string, html: string, text?: string) {
     try {
       await this.transporter.sendMail({
-        from: this.from, // IMPORTANTE: muchos SMTP exigen que sea igual a SMTP_USER
+        from: this.from, // IMPORTANTE: Office365 suele exigir que sea el mailbox autenticado
         to,
         subject,
         html,
         text: text ?? this.htmlToTextFallback(html),
       });
     } catch (err: any) {
-      this.logger.error(err?.message || err);
+      this.logger.error(
+        `MAIL ERROR: ${err?.code ?? ''} ${err?.responseCode ?? ''} ${err?.command ?? ''} ${err?.response ?? err?.message ?? err}`,
+      );
       throw new InternalServerErrorException('MAILER_AUTH_FAILED');
     }
+  }
+
+  // Helper específico para OTP (opcional)
+  async sendOtp(to: string, code: string, minutes: number) {
+    const html = this.buildOtpEmail(code, minutes);
+    const text = this.buildOtpText(code, minutes);
+    await this.sendEmail(to, 'Código de verificación', html, text);
   }
 
   // ---------------------------------------------------------------------------
@@ -111,8 +170,15 @@ export class MailerService {
    * - Compatible con Gmail/Outlook (tablas + inline CSS).
    */
   buildOtpEmail(code: string, minutes: number) {
-    const { appName, brandColor, brandLogoUrl, companyName, website, address, supportEmail } =
-      this.getBrand();
+    const {
+      appName,
+      brandColor,
+      brandLogoUrl,
+      companyName,
+      website,
+      address,
+      supportEmail,
+    } = this.getBrand();
 
     const safeCode = this.escapeHtml(code);
     const safeMinutes = Number.isFinite(Number(minutes)) ? Number(minutes) : 5;
@@ -144,7 +210,9 @@ export class MailerService {
         )}</a>`
       : '';
 
-    const addressBlock = address ? `<div style="margin-top:6px;">${this.escapeHtml(address)}</div>` : '';
+    const addressBlock = address
+      ? `<div style="margin-top:6px;">${this.escapeHtml(address)}</div>`
+      : '';
 
     return `
 <!doctype html>
@@ -253,7 +321,9 @@ export class MailerService {
                 <div style="font-size:12px;line-height:18px;color:#6B7280;">
                   Soporte: <a href="mailto:${this.escapeHtml(
                     supportEmail,
-                  )}" style="color:${brandColor};text-decoration:none;">${this.escapeHtml(supportEmail)}</a>
+                  )}" style="color:${brandColor};text-decoration:none;">${this.escapeHtml(
+      supportEmail,
+    )}</a>
                   ${websiteBlock ? `<span style="margin:0 8px;color:#CBD5E1;">|</span>${websiteBlock}` : ``}
                   ${addressBlock}
                 </div>
