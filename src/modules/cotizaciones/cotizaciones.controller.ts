@@ -99,6 +99,36 @@ export class CotizacionesController {
     return this.service.countByStatus('NO_APROBADO');
   }
 
+  @Get('stats/ultimos-6-meses')
+  @ApiOperation({
+    summary: 'Cotizaciones: Total vs Aprobadas/No aprobadas (últimos 6 meses)',
+  })
+  getStatsUltimos6Meses() {
+    return this.service.getStatsUltimos6Meses();
+  }
+
+  @Get('stats/actividad-semanal')
+  @ApiOperation({
+    summary: 'Cotizaciones creadas esta semana por día (Lun-Vie)',
+  })
+  @ApiQuery({
+    name: 'weekOffset',
+    required: false,
+    type: Number,
+    description: '0 = semana actual, -1 = semana pasada, etc.',
+  })
+  getActividadSemanal(@Query('weekOffset') weekOffset?: string) {
+    const offset = weekOffset != null ? Number(weekOffset) : 0;
+    return this.service.getActividadSemanal(Number.isFinite(offset) ? offset : 0);
+  }
+
+  // ✅ NUEVO: Snapshot FULL (absolutamente todo)
+  @Get(':id/full')
+  @ApiOperation({ summary: 'Obtener snapshot completo (cotización + items + overrides + distribución final)' })
+  getFull(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getFullSnapshot(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalles de una cotización (con items)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -186,30 +216,6 @@ export class CotizacionesController {
     const user = req.user as any;
     return this.service.updateStatus(id, dto, user.id);
   }
-
-  @Get('stats/ultimos-6-meses')
-  @ApiOperation({
-    summary: 'Cotizaciones: Total vs Aprobadas/No aprobadas (últimos 6 meses)',
-  })
-  getStatsUltimos6Meses() {
-    return this.service.getStatsUltimos6Meses();
-  }
-
-  @Get('stats/actividad-semanal')
-  @ApiOperation({
-    summary: 'Cotizaciones creadas esta semana por día (Lun-Vie)',
-  })
-  @ApiQuery({
-    name: 'weekOffset',
-    required: false,
-    type: Number,
-    description: '0 = semana actual, -1 = semana pasada, etc.',
-  })
-  getActividadSemanal(@Query('weekOffset') weekOffset?: string) {
-    const offset = weekOffset != null ? Number(weekOffset) : 0;
-    return this.service.getActividadSemanal(Number.isFinite(offset) ? offset : 0);
-  }
-
 
   @Post(':id/clone')
   @ApiOperation({

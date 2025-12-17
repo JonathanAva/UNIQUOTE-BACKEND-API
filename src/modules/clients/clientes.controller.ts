@@ -1,3 +1,4 @@
+// src/modules/clientes/clientes.controller.ts
 import {
   Body,
   Controller,
@@ -5,8 +6,9 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
-  Put,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -14,14 +16,13 @@ import { ClientesService } from './clientes.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
-import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
 import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
+import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
+import type { Request } from 'express';
 
-// Grupo de endpoints para gestión de clientes (empresas)
 @ApiTags('Clientes')
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RoleIdsGuard)
-// Solo roles con IDs 1,2,3 pueden acceder a estos endpoints
 @RoleIds(1, 2, 3)
 @Controller('clientes')
 export class ClientesController {
@@ -29,31 +30,38 @@ export class ClientesController {
 
   @Post()
   @ApiOperation({ summary: 'Crear cliente' })
-  create(@Body() dto: CreateClienteDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateClienteDto, @Req() req: Request) {
+    const user = req.user as any;
+    return this.service.create(dto, user.id);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar clientes' })
+  @ApiOperation({ summary: 'Listar clientes + stats' })
   findAll() {
     return this.service.findAll();
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener cliente por ID' })
+  @ApiOperation({ summary: 'Obtener cliente' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   @ApiOperation({ summary: 'Actualizar cliente' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateClienteDto) {
-    return this.service.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateClienteDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.service.update(id, dto, user.id);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar cliente' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
+    const user = req.user as any;
+    return this.service.remove(id, user.id);
   }
 }

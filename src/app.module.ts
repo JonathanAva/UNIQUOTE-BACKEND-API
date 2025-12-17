@@ -14,12 +14,10 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { CotizacionesModule } from './modules/cotizaciones/cotizaciones.module';
 import { ConstantesModule } from './modules/constantes/constantes.module';
 
+import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 
-
-// Módulo raíz que importa y compone todos los demás módulos de la app
 @Module({
   imports: [
-    // Logger estructurado usando pino
     LoggerModule.forRoot({
       pinoHttp: {
         transport: {
@@ -32,13 +30,12 @@ import { ConstantesModule } from './modules/constantes/constantes.module';
         },
       },
     }),
-    // Módulo de configuración global (variables de entorno)
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
       validationSchema,
     }),
-    // Módulos de negocio
+
     UsersModule,
     RolesModule,
     AuthModule,
@@ -47,6 +44,7 @@ import { ConstantesModule } from './modules/constantes/constantes.module';
     ProjectsModule,
     CotizacionesModule,
     ConstantesModule,
+    AuditoriaModule,
   ],
 })
 export class AppModule {}

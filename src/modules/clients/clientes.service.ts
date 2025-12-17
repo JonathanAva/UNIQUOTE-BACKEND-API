@@ -7,13 +7,17 @@ import {
 import { PrismaService } from '@/infra/database/prisma.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
-import { CotizacionStatus } from '@prisma/client'; // ✅ esto está bien
+import { CotizacionStatus } from '@prisma/client';
+import { AuditoriaService } from '@/modules/auditoria/auditoria.service';
 
 @Injectable()
 export class ClientesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
-  async create(dto: CreateClienteDto) {
+  async create(dto: CreateClienteDto, performedById: number) {
     const exists = await this.prisma.cliente.findFirst({
       where: { empresa: dto.empresa, razonSocial: dto.razonSocial },
       select: { id: true },
@@ -24,7 +28,7 @@ export class ClientesService {
       );
     }
 
-    return this.prisma.cliente.create({
+    const created = await this.prisma.cliente.create({
       data: dto,
       select: {
         id: true,
@@ -33,6 +37,19 @@ export class ClientesService {
         createdAt: true,
       },
     });
+
+    await this.auditoria.log({
+      accion: 'CREAR_CLIENTE',
+      descripcion: `Creó cliente "${created.empresa}" (${created.razonSocial})`,
+      entidad: 'CLIENTE',
+      entidadId: created.id,
+      performedById,
+      metadata: {
+        after: created,
+      },
+    });
+
+    return created;
   }
 
   async findAll() {
@@ -96,8 +113,15 @@ export class ClientesService {
     return c;
   }
 
-  async update(id: number, dto: UpdateClienteDto) {
-    const exists = await this.prisma.cliente.findUnique({ where: { id } });
+  async update(id: number, dto: UpdateClienteDto, performedById: number) {
+    const exists = await this.prisma.cliente.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        empresa: true,
+        razonSocial: true,
+      },
+    });
     if (!exists) throw new NotFoundException('Cliente no encontrado');
 
     if (
@@ -119,7 +143,7 @@ export class ClientesService {
       }
     }
 
-    return this.prisma.cliente.update({
+    const updated = await this.prisma.cliente.update({
       where: { id },
       data: dto,
       select: {
@@ -129,13 +153,41 @@ export class ClientesService {
         updatedAt: true,
       },
     });
+
+    await this.auditoria.log({
+      accion: 'EDITAR_CLIENTE',
+      descripcion: `Editó cliente "${updated.empresa}" (${updated.razonSocial})`,
+      entidad: 'CLIENTE',
+      entidadId: updated.id,
+      performedById,
+      metadata: {
+        before: exists,
+        after: updated,
+        changes: dto,
+      },
+    });
+
+    return updated;
   }
 
-  async remove(id: number) {
-    const exists = await this.prisma.cliente.findUnique({ where: { id } });
+  async remove(id: number, performedById: number) {
+    const exists = await this.prisma.cliente.findUnique({
+      where: { id },
+      select: { id: true, empresa: true, razonSocial: true },
+    });
     if (!exists) throw new NotFoundException('Cliente no encontrado');
 
     await this.prisma.cliente.delete({ where: { id } });
+
+    await this.auditoria.log({
+      accion: 'ELIMINAR_CLIENTE',
+      descripcion: `Eliminó cliente "${exists.empresa}" (${exists.razonSocial})`,
+      entidad: 'CLIENTE',
+      entidadId: exists.id,
+      performedById,
+      metadata: { deleted: exists },
+    });
+
     return { deleted: true };
   }
 }

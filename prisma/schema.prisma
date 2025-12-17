@@ -64,6 +64,7 @@ model User {
   trustedDevices TrustedDevice[]
   projects       Project[]
   cotizaciones   Cotizacion[]
+  auditorias     Auditoria[]
 }
 
 // =====================================================
@@ -163,13 +164,34 @@ model Project {
 }
 
 // =====================================================
+// MODELO: Auditoria
+// =====================================================
+model Auditoria {
+  id          Int      @id @default(autoincrement())
+  accion      String   // CREAR_COTIZACION, CAMBIAR_ESTADO, EDITAR_ITEM, etc.
+  descripcion String   // "Aprobó cotización #101"
+  entidad     String   // "COTIZACION", "CONSTANTE", etc.
+  entidadId   Int?
+  metadata    Json?
+
+  cotizacionId Int?
+  cotizacion   Cotizacion? @relation(fields: [cotizacionId], references: [id], onDelete: SetNull)
+
+  performedById Int
+  performedBy   User @relation(fields: [performedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entidad, entidadId])
+  @@index([cotizacionId])
+  @@index([performedById, createdAt])
+  @@map("auditoria")
+}
+
+// =====================================================
 // MODELO: Cotizacion
 // =====================================================
-/// Modelo central donde se almacena toda la información de una cotización.
-/// Con los nuevos campos para trabajo de campo:
-/// - trabajoDeCampoRealiza (boolean)
-/// - trabajoDeCampoTipo ("propio" | "subcontratado")
-/// - trabajoDeCampoCosto (monto si es subcontratado)
 model Cotizacion {
   id     Int              @id @default(autoincrement())
   name   String
@@ -183,7 +205,7 @@ model Cotizacion {
   // NUEVOS CAMPOS CORRECTOS
   trabajoDeCampoRealiza Boolean
   trabajoDeCampoTipo    String? // 'propio' | 'subcontratado'
-  trabajoDeCampoCosto   Float? // monto si es subcontratado
+  trabajoDeCampoCosto   Float?  // monto si es subcontratado
 
   numeroOlasBi Int?
 
@@ -191,7 +213,9 @@ model Cotizacion {
   totalEntrevistas         Int
   duracionCuestionarioMin  Int
   tipoEntrevista           String
-  penetracionCategoria     Int
+
+  penetracionCategoria     Float   // ✅ FIX: antes era Int, pero tu backend usa 0–1
+
   cobertura                String
   supervisores             Int
   encuestadoresTotales     Int
@@ -199,7 +223,9 @@ model Cotizacion {
   realizamosScript         Boolean
   clienteSolicitaReporte   Boolean
   clienteSolicitaInformeBI Boolean
-  clienteSolicitaTablas    Boolean?
+
+  clienteSolicitaTablas    Boolean @default(false) // ✅ FIX: antes era Boolean? (null)
+
   incentivoTotal           Int?
 
   // Totales
@@ -220,6 +246,7 @@ model Cotizacion {
 
   items                 CotizacionItem[]
   distribucionOverrides CotizacionDistribucionOverride[]
+  auditorias            Auditoria[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -256,30 +283,17 @@ model CotizacionItem {
 // =====================================================
 // MODELO: Constante
 // =====================================================
-/// Constantes de cálculo dinámico utilizadas en el motor de cotización.
-/// Estas pueden agruparse por categoría y subcategoría.
-/// Ejemplos:
-/// - categoría: "Trabajo de Campo", subcategoría: "Viático - San Miguel"
-/// - categoría: "Procesamiento", subcategoría: "Codificación"
 model Constante {
   id Int @id @default(autoincrement())
 
-  /// Categoría general (ej. Trabajo de Campo, Recursos, Dirección, Procesamiento)
-  categoria String
-
-  /// Subcategoría específica (ej. Viático - San Miguel, Pago Encuestador Diario)
+  categoria    String
   subcategoria String
-
-  /// Valor numérico editable
-  valor Float
-
-  /// Unidad opcional (ej. "$", "por hora", "USD", etc.)
-  unidad String?
+  valor        Float
+  unidad       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// Cada combinación categoría + subcategoría debe ser única
   @@unique([categoria, subcategoria])
   @@index([categoria])
 }
@@ -287,7 +301,6 @@ model Constante {
 // =====================================================
 // MODELO: CotizacionDistribucionOverride
 // =====================================================
-// prisma/schema.prisma
 model CotizacionDistribucionOverride {
   id           Int    @id @default(autoincrement())
   cotizacionId Int

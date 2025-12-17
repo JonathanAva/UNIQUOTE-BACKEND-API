@@ -1,13 +1,14 @@
+// src/modules/clientes/clientes.module.ts
 import { Module } from '@nestjs/common';
-import { ClientesService } from './clientes.service';
 import { ClientesController } from './clientes.controller';
+import { ClientesService } from './clientes.service';
 import { PrismaService } from '@/infra/database/prisma.service';
-import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
+import { AuditoriaModule } from '@/modules/auditoria/auditoria.module';
 
-// Módulo que agrupa controller y service de Clientes
 @Module({
+  imports: [AuditoriaModule],
   controllers: [ClientesController],
-  providers: [ClientesService, PrismaService, RoleIdsGuard],
+  providers: [ClientesService, PrismaService],
   exports: [ClientesService],
 })
 export class ClientesModule {}

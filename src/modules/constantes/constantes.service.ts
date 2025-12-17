@@ -1,16 +1,32 @@
+// src/modules/constantes/constantes.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/database/prisma.service';
 import { CreateConstanteDto } from './dto/create-constante.dto';
 import { UpdateConstanteDto } from './dto/update-constante.dto';
+import { AuditoriaService } from '@/modules/auditoria/auditoria.service';
 
 @Injectable()
 export class ConstantesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
-  async create(dto: CreateConstanteDto) {
-    return this.prisma.constante.create({
+  async create(dto: CreateConstanteDto, performedById: number) {
+    const created = await this.prisma.constante.create({
       data: dto,
     });
+
+    await this.auditoria.log({
+      accion: 'CREAR_CONSTANTE',
+      descripcion: `Creó constante "${created.categoria}.${created.subcategoria}" = ${created.valor}`,
+      entidad: 'CONSTANTE',
+      entidadId: created.id,
+      performedById,
+      metadata: { after: created },
+    });
+
+    return created;
   }
 
   async findAll() {
@@ -29,7 +45,7 @@ export class ConstantesService {
     return constante;
   }
 
-  async update(id: number, dto: UpdateConstanteDto) {
+  async update(id: number, dto: UpdateConstanteDto, performedById: number) {
     const existente = await this.prisma.constante.findUnique({
       where: { id },
     });
@@ -38,10 +54,25 @@ export class ConstantesService {
       throw new NotFoundException('Constante no encontrada');
     }
 
-    return this.prisma.constante.update({
+    const updated = await this.prisma.constante.update({
       where: { id },
       data: dto,
     });
+
+    await this.auditoria.log({
+      accion: 'EDITAR_CONSTANTE',
+      descripcion: `Editó constante "${updated.categoria}.${updated.subcategoria}"`,
+      entidad: 'CONSTANTE',
+      entidadId: updated.id,
+      performedById,
+      metadata: {
+        before: existente,
+        after: updated,
+        changes: dto,
+      },
+    });
+
+    return updated;
   }
 
   async findByCategoria(nombre: string) {
@@ -61,42 +92,44 @@ export class ConstantesService {
     });
 
     if (!constantes.length) {
-      throw new NotFoundException(`No se encontraron constantes en la categoría "${nombre}"`);
+      throw new NotFoundException(
+        `No se encontraron constantes en la categoría "${nombre}"`,
+      );
     }
 
     return constantes;
   }
 
-
-async findBySubcategoria(nombre: string) {
-  const constantes = await this.prisma.constante.findMany({
-    where: {
-      subcategoria: {
-        contains: nombre,
-        mode: 'insensitive', // ignora mayúsculas
+  async findBySubcategoria(nombre: string) {
+    const constantes = await this.prisma.constante.findMany({
+      where: {
+        subcategoria: {
+          contains: nombre,
+          mode: 'insensitive',
+        },
       },
-    },
-    orderBy: {
-      categoria: 'asc',
-    },
-    select: {
-      id: true,
-      categoria: true,
-      subcategoria: true,
-      valor: true,
-      unidad: true,
-    },
-  });
+      orderBy: {
+        categoria: 'asc',
+      },
+      select: {
+        id: true,
+        categoria: true,
+        subcategoria: true,
+        valor: true,
+        unidad: true,
+      },
+    });
 
-  if (!constantes.length) {
-    throw new NotFoundException(`No se encontraron constantes con la subcategoría que contenga "${nombre}"`);
+    if (!constantes.length) {
+      throw new NotFoundException(
+        `No se encontraron constantes con la subcategoría que contenga "${nombre}"`,
+      );
+    }
+
+    return constantes;
   }
 
-  return constantes;
-}
-
-
-  async remove(id: number) {
+  async remove(id: number, performedById: number) {
     const existe = await this.prisma.constante.findUnique({
       where: { id },
     });
@@ -109,22 +142,27 @@ async findBySubcategoria(nombre: string) {
       where: { id },
     });
 
+    await this.auditoria.log({
+      accion: 'ELIMINAR_CONSTANTE',
+      descripcion: `Eliminó constante "${existe.categoria}.${existe.subcategoria}"`,
+      entidad: 'CONSTANTE',
+      entidadId: existe.id,
+      performedById,
+      metadata: { deleted: existe },
+    });
+
     return { message: 'Constante eliminada correctamente' };
   }
-  
-        async getAllAsKeyValue(): Promise<Record<string, number>> {
-        const constantes = await this.prisma.constante.findMany();
 
-        const record: Record<string, number> = {};
+  async getAllAsKeyValue(): Promise<Record<string, number>> {
+    const constantes = await this.prisma.constante.findMany();
 
-        for (const c of constantes) {
-            const key = `${c.categoria}.${c.subcategoria}`; 
-            record[key] = c.valor;
-        }
+    const record: Record<string, number> = {};
+    for (const c of constantes) {
+      const key = `${c.categoria}.${c.subcategoria}`;
+      record[key] = c.valor;
+    }
 
-        return record;
-        }
-
-
-
+    return record;
+  }
 }
