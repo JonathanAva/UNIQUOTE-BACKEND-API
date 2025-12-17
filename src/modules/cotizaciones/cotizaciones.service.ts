@@ -2241,4 +2241,337 @@ if (
       })),
     };
   }
+
+    // ------------------------------------------------------
+  // STATS POR USUARIO (TODOS / MINE)
+  // ------------------------------------------------------
+
+  // ✅ Resumen por TODOS los usuarios (Admin/Gerente)
+  async getStatsResumenPorUsuarios() {
+    type Row = {
+      userId: number;
+      name: string;
+      lastName: string;
+      total: bigint;
+      enviados: bigint;
+      aprobados: bigint;
+      no_aprobados: bigint;
+      totalCobrar: any; // numeric puede venir como string
+      ultimaCreadaAt: Date | null;
+    };
+
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT
+        u.id as "userId",
+        u.name as "name",
+        u."lastName" as "lastName",
+        COALESCE(count(c.id), 0) as "total",
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'ENVIADO'), 0) as "enviados",
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'APROBADO'), 0) as "aprobados",
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'NO_APROBADO'), 0) as "no_aprobados",
+        COALESCE(sum(c."totalCobrar"), 0) as "totalCobrar",
+        MAX(c."createdAt") as "ultimaCreadaAt"
+      FROM "User" u
+      LEFT JOIN "Cotizacion" c
+        ON c."createdById" = u.id
+      GROUP BY u.id, u.name, u."lastName"
+      ORDER BY "total" DESC, u.id ASC;
+    `);
+
+    return rows.map((r) => ({
+      userId: r.userId,
+      name: r.name,
+      lastName: r.lastName,
+      total: Number(r.total),
+      enviados: Number(r.enviados),
+      aprobadas: Number(r.aprobados),
+      noAprobadas: Number(r.no_aprobados),
+      totalCobrar: Number(r.totalCobrar),
+      ultimaCreadaAt: r.ultimaCreadaAt,
+    }));
+  }
+
+  // ✅ Resumen del usuario logueado
+  async getStatsResumenMine(userId: number) {
+    type Row = {
+      userId: number;
+      name: string;
+      lastName: string;
+      total: bigint;
+      enviados: bigint;
+      aprobados: bigint;
+      no_aprobados: bigint;
+      totalCobrar: any;
+      ultimaCreadaAt: Date | null;
+    };
+
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT
+        u.id as "userId",
+        u.name as "name",
+        u."lastName" as "lastName",
+        COALESCE(count(c.id), 0) as "total",
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'ENVIADO'), 0) as "enviados",
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'APROBADO'), 0) as "aprobados",
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'NO_APROBADO'), 0) as "no_aprobados",
+        COALESCE(sum(c."totalCobrar"), 0) as "totalCobrar",
+        MAX(c."createdAt") as "ultimaCreadaAt"
+      FROM "User" u
+      LEFT JOIN "Cotizacion" c
+        ON c."createdById" = u.id
+      WHERE u.id = ${userId}
+      GROUP BY u.id, u.name, u."lastName";
+    `);
+
+    const r = rows[0];
+    if (!r) {
+      // por si el userId no existe
+      return {
+        userId,
+        total: 0,
+        enviados: 0,
+        aprobadas: 0,
+        noAprobadas: 0,
+        totalCobrar: 0,
+        ultimaCreadaAt: null,
+      };
+    }
+
+    return {
+      userId: r.userId,
+      name: r.name,
+      lastName: r.lastName,
+      total: Number(r.total),
+      enviados: Number(r.enviados),
+      aprobadas: Number(r.aprobados),
+      noAprobadas: Number(r.no_aprobados),
+      totalCobrar: Number(r.totalCobrar),
+      ultimaCreadaAt: r.ultimaCreadaAt,
+    };
+  }
+
+  // ✅ Últimos 6 meses: TODOS los usuarios (Admin/Gerente)
+  async getStatsUltimos6MesesPorUsuarios() {
+    type Row = {
+      userId: number;
+      name: string;
+      lastName: string;
+      month: string;
+      total: bigint;
+      enviados: bigint;
+      aprobadas: bigint;
+      no_aprobadas: bigint;
+    };
+
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      WITH months AS (
+        SELECT
+          date_trunc('month', (now() AT TIME ZONE 'America/El_Salvador')) - interval '5 months'
+          + (n || ' months')::interval AS month_local
+        FROM generate_series(0, 5) AS n
+      ),
+      bounds AS (
+        SELECT
+          month_local,
+          (month_local AT TIME ZONE 'America/El_Salvador') AS start_ts,
+          ((month_local + interval '1 month') AT TIME ZONE 'America/El_Salvador') AS end_ts
+        FROM months
+      )
+      SELECT
+        u.id as "userId",
+        u.name as "name",
+        u."lastName" as "lastName",
+        to_char(b.month_local, 'YYYY-MM') AS month,
+        COALESCE(count(c.id), 0) AS total,
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'ENVIADO'), 0) AS enviados,
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'APROBADO'), 0) AS aprobadas,
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'NO_APROBADO'), 0) AS no_aprobadas
+      FROM "User" u
+      CROSS JOIN bounds b
+      LEFT JOIN "Cotizacion" c
+        ON c."createdById" = u.id
+       AND c."createdAt" >= b.start_ts
+       AND c."createdAt" <  b.end_ts
+      GROUP BY u.id, u.name, u."lastName", b.month_local
+      ORDER BY u.id ASC, b.month_local ASC;
+    `);
+
+    // lo estructuramos por usuario
+    const map = new Map<number, any>();
+    for (const r of rows) {
+      if (!map.has(r.userId)) {
+        map.set(r.userId, {
+          userId: r.userId,
+          name: r.name,
+          lastName: r.lastName,
+          months: [],
+        });
+      }
+      map.get(r.userId).months.push({
+        month: r.month,
+        total: Number(r.total),
+        enviados: Number(r.enviados),
+        aprobadas: Number(r.aprobadas),
+        noAprobadas: Number(r.no_aprobadas),
+      });
+    }
+
+    return Array.from(map.values());
+  }
+
+  // ✅ Últimos 6 meses: usuario logueado
+  async getStatsUltimos6MesesMine(userId: number) {
+    type Row = {
+      month: string;
+      total: bigint;
+      aprobadas: bigint;
+      no_aprobadas: bigint;
+      enviados: bigint;
+    };
+
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      WITH months AS (
+        SELECT
+          date_trunc('month', (now() AT TIME ZONE 'America/El_Salvador')) - interval '5 months'
+          + (n || ' months')::interval AS month_local
+        FROM generate_series(0, 5) AS n
+      ),
+      bounds AS (
+        SELECT
+          month_local,
+          (month_local AT TIME ZONE 'America/El_Salvador') AS start_ts,
+          ((month_local + interval '1 month') AT TIME ZONE 'America/El_Salvador') AS end_ts
+        FROM months
+      )
+      SELECT
+        to_char(b.month_local, 'YYYY-MM') AS month,
+        COALESCE(count(c.id), 0) AS total,
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'ENVIADO'), 0) AS enviados,
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'APROBADO'), 0) AS aprobadas,
+        COALESCE(count(c.id) FILTER (WHERE c.status = 'NO_APROBADO'), 0) AS no_aprobadas
+      FROM bounds b
+      LEFT JOIN "Cotizacion" c
+        ON c."createdAt" >= b.start_ts
+       AND c."createdAt" <  b.end_ts
+       AND c."createdById" = ${userId}
+      GROUP BY b.month_local
+      ORDER BY b.month_local;
+    `);
+
+    return rows.map((r) => ({
+      month: r.month,
+      total: Number(r.total),
+      enviados: Number(r.enviados),
+      aprobadas: Number(r.aprobadas),
+      noAprobadas: Number(r.no_aprobadas),
+    }));
+  }
+
+  // ✅ Actividad semanal: TODOS los usuarios (Admin/Gerente)
+  async getActividadSemanalPorUsuarios(weekOffset = 0) {
+    type Row = {
+      userId: number;
+      name: string;
+      lastName: string;
+      idx: number;
+      date: string;
+      total: bigint;
+    };
+
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      WITH params AS (
+        SELECT (date_trunc('week', (now() AT TIME ZONE 'America/El_Salvador')) + (${weekOffset} * interval '1 week')) AS week_local
+      ),
+      days AS (
+        SELECT
+          n AS idx,
+          (p.week_local + (n || ' days')::interval) AS day_local,
+          ((p.week_local + (n || ' days')::interval) AT TIME ZONE 'America/El_Salvador') AS start_ts,
+          ((p.week_local + (n || ' days')::interval + interval '1 day') AT TIME ZONE 'America/El_Salvador') AS end_ts
+        FROM params p, generate_series(0, 4) AS n
+      )
+      SELECT
+        u.id as "userId",
+        u.name as "name",
+        u."lastName" as "lastName",
+        d.idx,
+        to_char(d.day_local, 'YYYY-MM-DD') AS date,
+        COALESCE(count(c.id), 0) AS total
+      FROM "User" u
+      CROSS JOIN days d
+      LEFT JOIN "Cotizacion" c
+        ON c."createdById" = u.id
+       AND c."createdAt" >= d.start_ts
+       AND c."createdAt" <  d.end_ts
+      GROUP BY u.id, u.name, u."lastName", d.idx, d.day_local
+      ORDER BY u.id ASC, d.idx ASC;
+    `);
+
+    const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+
+    const map = new Map<number, any>();
+    for (const r of rows) {
+      if (!map.has(r.userId)) {
+        map.set(r.userId, {
+          userId: r.userId,
+          name: r.name,
+          lastName: r.lastName,
+          days: [],
+        });
+      }
+      map.get(r.userId).days.push({
+        day: labels[r.idx] ?? `D${r.idx}`,
+        date: r.date,
+        total: Number(r.total),
+      });
+    }
+
+    return {
+      weekOffset,
+      users: Array.from(map.values()),
+    };
+  }
+
+  // ✅ Actividad semanal: usuario logueado
+  async getActividadSemanalMine(userId: number, weekOffset = 0) {
+    type Row = { idx: number; date: string; total: bigint };
+
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      WITH params AS (
+        SELECT (date_trunc('week', (now() AT TIME ZONE 'America/El_Salvador')) + (${weekOffset} * interval '1 week')) AS week_local
+      ),
+      days AS (
+        SELECT
+          n AS idx,
+          (p.week_local + (n || ' days')::interval) AS day_local,
+          ((p.week_local + (n || ' days')::interval) AT TIME ZONE 'America/El_Salvador') AS start_ts,
+          ((p.week_local + (n || ' days')::interval + interval '1 day') AT TIME ZONE 'America/El_Salvador') AS end_ts
+        FROM params p, generate_series(0, 4) AS n
+      )
+      SELECT
+        d.idx,
+        to_char(d.day_local, 'YYYY-MM-DD') AS date,
+        COALESCE(count(c.id), 0) AS total
+      FROM days d
+      LEFT JOIN "Cotizacion" c
+        ON c."createdAt" >= d.start_ts
+       AND c."createdAt" <  d.end_ts
+       AND c."createdById" = ${userId}
+      GROUP BY d.idx, d.day_local
+      ORDER BY d.idx;
+    `);
+
+    const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+
+    return {
+      weekOffset,
+      days: rows.map((r) => ({
+        day: labels[r.idx] ?? `D${r.idx}`,
+        date: r.date,
+        total: Number(r.total),
+      })),
+    };
+  }
+
+
 }

@@ -122,6 +122,73 @@ export class CotizacionesController {
     return this.service.getActividadSemanal(Number.isFinite(offset) ? offset : 0);
   }
 
+    // ------------------------------------------------------
+  // ✅ STATS POR USUARIOS / MINE
+  // ------------------------------------------------------
+
+  // ✅ Admin/Gerente: resumen por usuario
+  @Get('stats/users/summary')
+  @RoleIds(1, 2)
+  @ApiOperation({ summary: 'Resumen de cotizaciones por usuario (ADMIN/GERENTE)' })
+  getStatsUsersSummary() {
+    return this.service.getStatsResumenPorUsuarios();
+  }
+
+  // ✅ Admin/Gerente: últimos 6 meses por usuario
+  @Get('stats/users/ultimos-6-meses')
+  @RoleIds(1, 2)
+  @ApiOperation({ summary: 'Últimos 6 meses por usuario (ADMIN/GERENTE)' })
+  getStatsUsersUltimos6Meses() {
+    return this.service.getStatsUltimos6MesesPorUsuarios();
+  }
+
+  // ✅ Admin/Gerente: actividad semanal por usuario
+  @Get('stats/users/actividad-semanal')
+  @RoleIds(1, 2)
+  @ApiOperation({ summary: 'Actividad semanal por usuario (ADMIN/GERENTE)' })
+  @ApiQuery({
+    name: 'weekOffset',
+    required: false,
+    type: Number,
+    description: '0 = semana actual, -1 = semana pasada, etc.',
+  })
+  getStatsUsersActividadSemanal(@Query('weekOffset') weekOffset?: string) {
+    const offset = weekOffset != null ? Number(weekOffset) : 0;
+    return this.service.getActividadSemanalPorUsuarios(Number.isFinite(offset) ? offset : 0);
+  }
+
+  // ✅ Usuario logueado: resumen
+  @Get('stats/mine/summary')
+  @ApiOperation({ summary: 'Resumen de mis cotizaciones (usuario logueado)' })
+  getStatsMineSummary(@Req() req: Request) {
+    const user = req.user as any;
+    return this.service.getStatsResumenMine(user.id);
+  }
+
+  // ✅ Usuario logueado: últimos 6 meses
+  @Get('stats/mine/ultimos-6-meses')
+  @ApiOperation({ summary: 'Mis cotizaciones: Total vs estados (últimos 6 meses)' })
+  getStatsMineUltimos6Meses(@Req() req: Request) {
+    const user = req.user as any;
+    return this.service.getStatsUltimos6MesesMine(user.id);
+  }
+
+  // ✅ Usuario logueado: actividad semanal
+  @Get('stats/mine/actividad-semanal')
+  @ApiOperation({ summary: 'Mis cotizaciones creadas esta semana por día (Lun-Vie)' })
+  @ApiQuery({
+    name: 'weekOffset',
+    required: false,
+    type: Number,
+    description: '0 = semana actual, -1 = semana pasada, etc.',
+  })
+  getStatsMineActividadSemanal(@Req() req: Request, @Query('weekOffset') weekOffset?: string) {
+    const user = req.user as any;
+    const offset = weekOffset != null ? Number(weekOffset) : 0;
+    return this.service.getActividadSemanalMine(user.id, Number.isFinite(offset) ? offset : 0);
+  }
+
+
   // ✅ NUEVO: Snapshot FULL (absolutamente todo)
   @Get(':id/full')
   @ApiOperation({ summary: 'Obtener snapshot completo (cotización + items + overrides + distribución final)' })
