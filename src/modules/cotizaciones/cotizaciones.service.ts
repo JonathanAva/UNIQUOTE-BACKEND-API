@@ -1544,6 +1544,7 @@ if (
       totalConComision?: number | null;
     },
     userId: number,
+    roleId?: number,
   ) {
     // 1) Cargar cotización para permisos y factores
     const cot = await this.prisma.cotizacion.findUnique({

@@ -229,7 +229,8 @@ export class CotizacionesController {
   }
 
   @Patch(':id/items/:itemId')
-  @ApiOperation({ summary: 'Editar un ítem de la cotización y recalcular totales' })
+  @RoleIds(1, 2) // ✅ Solo Admin, Gerente
+  @ApiOperation({ summary: 'Editar un ítem de la cotización y recalcular totales (ADMIN/GERENTE)' })
   updateItem(
     @Param('id', ParseIntPipe) id: number,
     @Param('itemId', ParseIntPipe) itemId: number,
@@ -237,8 +238,9 @@ export class CotizacionesController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    return this.service.updateItem(id, itemId, dto, user.id);
+    return this.service.updateItem(id, itemId, dto, user.id, user.roleId); // ✅ pasar roleId
   }
+
 
   // === NUEVO (alias genérico) ===
   @Patch(':id/distribucion')
