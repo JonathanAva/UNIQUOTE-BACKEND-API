@@ -7,22 +7,32 @@ import {
   Delete,
   Put,
   ParseIntPipe,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { RoleIdsGuard } from '@/modules/auth/guards/role-ids.guard';
+import { RoleIds } from '@/modules/auth/decorators/role-ids.decorator';
+import type { Request } from 'express';
 
 // Endpoints CRUD para Usuarios
 @ApiTags('Usuarios')
+@ApiBearerAuth('jwt')
+@UseGuards(JwtAuthGuard, RoleIdsGuard)
+@RoleIds(1, 2) // Admin / Gerente (ajusta si querés)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
   @ApiOperation({ summary: 'Crear nuevo usuario' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  create(@Body() createUserDto: CreateUserDto, @Req() req: Request) {
+    const user = req.user as any;
+    return this.usersService.create(createUserDto, user.id);
   }
 
   @Get()
@@ -42,13 +52,16 @@ export class UsersController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
+    @Req() req: Request,
   ) {
-    return this.usersService.update(id, updateUserDto);
+    const user = req.user as any;
+    return this.usersService.update(id, updateUserDto, user.id);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar usuario' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
+    const user = req.user as any;
+    return this.usersService.remove(id, user.id);
   }
 }

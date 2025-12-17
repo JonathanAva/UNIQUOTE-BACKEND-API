@@ -63,7 +63,6 @@ export class ProjectsController {
     return this.projectsService.findAll();
   }
 
-
   @Get(':id')
   @ApiOperation({
     summary: 'Obtener detalle de proyecto + lista de cotizaciones',
