@@ -15,48 +15,42 @@ export class MailerService {
     // -------------------------------------------------------------------------
     // Lectura de configuración SMTP desde variables de entorno
     // -------------------------------------------------------------------------
-    const host = this.config.get<string>('SMTP_HOST') ?? 'smtp.office365.com';
-    const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
+    // Gmail/Google Workspace:
+    // - 465 = SSL (secure true)
+    // - 587 = STARTTLS (secure false)
+    const host = this.config.get<string>('SMTP_HOST') ?? 'smtp.gmail.com';
+    const port = Number(this.config.get<string>('SMTP_PORT') ?? 465);
 
-    // ✅ En Office365: 587 = STARTTLS (secure false). 465 = SSL (secure true)
-    const secure = port === 465;
+    // Si definís SMTP_SECURE en .env, se respeta. Si no, se infiere por puerto.
+    const secureEnv = this.config.get<string>('SMTP_SECURE');
+    const secure =
+      secureEnv != null ? secureEnv === 'true' : port === 465;
 
     const user = this.config.get<string>('SMTP_USER') ?? '';
     const pass = this.config.get<string>('SMTP_PASS') ?? '';
 
     // Si no especificas EMAIL_FROM, usa el mismo del usuario autenticado
-    // ✅ Nota: Office365 suele exigir que el "from" sea el mismo mailbox autenticado.
+    // ✅ Nota: Gmail/Workspace suele exigir que el "from" sea el mailbox autenticado o un alias válido.
     this.from =
       this.config.get<string>('EMAIL_FROM') ||
       (user ? `Unimer El Salvador <${user}>` : 'no-reply@example.com');
 
-    // ✅ MUY IMPORTANTE: EHLO/HELO válido (evita 503 Bad sequence of commands en Exchange)
-    const ehloName =
-      this.config.get<string>('SMTP_EHLO_NAME') ??
-      'unimerelsalvador.com'; // puedes cambiarlo a "api.unimerelsalvador.com" o "localhost"
-
     // -------------------------------------------------------------------------
-    // Transport (Office365 / Exchange Online)
+    // Transport (Google / Gmail / Workspace)
     // -------------------------------------------------------------------------
     this.transporter = nodemailer.createTransport({
       host,
       port,
-      secure, // 587=false (STARTTLS), 465=true (SSL)
+      secure, // 465=true (SSL), 587=false (STARTTLS)
+
       auth: { user, pass },
 
-      // ✅ Exchange a veces rechaza EHLO con hostname raro (Windows / underscores).
-      name: ehloName,
-
-      // ✅ Para 587 fuerza STARTTLS antes de AUTH
-      requireTLS: false,
-
-      // A veces ayuda con Exchange
-      authMethod: 'LOGIN',
+      // En 587 fuerza STARTTLS antes de AUTH. En 465 no aplica.
+      requireTLS: port === 587,
 
       tls: {
         minVersion: 'TLSv1.2',
-        servername: host, // ✅ importante en algunos entornos
-        rejectUnauthorized: true, // ✅ Office365 debe ir true
+        rejectUnauthorized: true,
       },
 
       // Timeouts razonables
@@ -72,7 +66,7 @@ export class MailerService {
     // ✅ Esto te imprime si el SMTP conecta/auth o por qué falla
     this.transporter
       .verify()
-      .then(() => this.logger.log('SMTP listo ✅'))
+      .then(() => this.logger.log('SMTP listo ✅ (Google)'))
       .catch((e: any) => {
         this.logger.error(
           `SMTP verify falló ❌ code=${e?.code} responseCode=${e?.responseCode} command=${e?.command} response=${e?.response ?? e?.message ?? e}`,
@@ -139,7 +133,7 @@ export class MailerService {
   async sendEmail(to: string, subject: string, html: string, text?: string) {
     try {
       await this.transporter.sendMail({
-        from: this.from, // IMPORTANTE: Office365 suele exigir que sea el mailbox autenticado
+        from: this.from, // IMPORTANTE: Gmail suele exigir que sea el mailbox autenticado o un alias válido
         to,
         subject,
         html,
