@@ -1,3 +1,5 @@
+// src/modules/cotizaciones/cotizaciones.service.ts
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -6,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { Prisma, CotizacionStatus } from '@prisma/client';
 import { PrismaService } from '@/infra/database/prisma.service';
-import { CreateCotizacionDto, TrabajoDeCampoTipo } from './dto/create-cotizacion.dto';
+import {
+  CreateCotizacionDto,
+  TrabajoDeCampoTipo,
+} from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { buildCotizacionCasaPorCasa } from './builder/casa por casa/nacional.builder';
@@ -47,13 +52,50 @@ export class CotizacionesService {
   }
 
   // ------------------------------------------------------
-  // GENERAR CÓDIGO
+  // GENERAR CÓDIGO (único) - evita choque aunque hayan deletes/concurrencia
   // ------------------------------------------------------
   private async generateCotizacionCode(projectId: number): Promise<string> {
-    const count = await this.prisma.cotizacion.count({
-      where: { projectId },
-    });
-    return `COT-${projectId}-${count + 1}`;
+    // Arranca con count+1, pero si ya existe (por deletes o concurrencia),
+    // incrementa hasta encontrar uno libre.
+    let n = (await this.prisma.cotizacion.count({ where: { projectId } })) + 1;
+
+    while (
+      await this.prisma.cotizacion.findUnique({
+        where: { code: `COT-${projectId}-${n}` },
+        select: { id: true },
+      })
+    ) {
+      n++;
+    }
+
+    return `COT-${projectId}-${n}`;
+  }
+
+  // ------------------------------------------------------
+  // GENERAR NOMBRE ÚNICO (por projectId) - para clones/mover de proyecto
+  // ------------------------------------------------------
+  private async generateUniqueNameForProject(
+    projectId: number,
+    baseName: string,
+    excludeId?: number,
+  ): Promise<string> {
+    let finalName = baseName;
+    let counter = 1;
+
+    while (
+      (await this.prisma.cotizacion.count({
+        where: {
+          projectId,
+          name: finalName,
+          ...(excludeId ? { NOT: { id: excludeId } } : {}),
+        },
+      })) > 0
+    ) {
+      counter++;
+      finalName = `${baseName} ${counter}`; // "(copia) 2", "(copia) 3", ...
+    }
+
+    return finalName;
   }
 
   // ------------------------------------------------------
@@ -85,7 +127,7 @@ export class CotizacionesService {
       );
     }
 
-    // ✨ Normaliza penetracion
+    // ✨ Normaliza penetración (se guarda 0..1)
     let penetracion: number;
     if (typeof dto.penetracionCategoria === 'string') {
       const value = dto.penetracionCategoria.trim().toLowerCase();
@@ -196,7 +238,7 @@ export class CotizacionesService {
       },
     });
 
-    // ✅ FIX: recalcular desde la distribución real (AMSS/Nacional)
+    // ✅ FIX: recalcular desde la distribución real (AMSS/Nacional/URBANO)
     if (
       dto.trabajoDeCampoRealiza === true &&
       dto.trabajoDeCampoTipo === TrabajoDeCampoTipo.PROPIO
@@ -289,6 +331,7 @@ export class CotizacionesService {
     return cot;
   }
 
+  // ✅ Snapshot FULL (cotización + overrides + distribución final)
   async getFullSnapshot(id: number) {
     const cot = await this.prisma.cotizacion.findUnique({
       where: { id },
@@ -354,7 +397,7 @@ export class CotizacionesService {
 
     if (!cot) throw new NotFoundException('Cotización no encontrada');
 
-    // ✅ Distribución final calculada (AMSS o Nacional según cobertura)
+    // ✅ Distribución final calculada (AMSS / NACIONAL / URBANO)
     const distribucion = await this.getDistribucion(id);
 
     return {
@@ -415,7 +458,7 @@ export class CotizacionesService {
       );
     }
 
-    // ✅ Normalizar penetración si viene
+    // ✅ Normalizar penetración si viene (se guarda 0..1)
     let penetracion: number | undefined = undefined;
 
     if (dto.penetracionCategoria !== undefined) {
@@ -431,15 +474,22 @@ export class CotizacionesService {
         penetracion = dto.penetracionCategoria;
       }
 
-      if (!Number.isFinite(penetracion) || penetracion <= 0 || penetracion > 1) {
+      if (
+        !Number.isFinite(penetracion) ||
+        penetracion <= 0 ||
+        penetracion > 1
+      ) {
         throw new BadRequestException(
           'penetracionCategoria debe ser un número válido entre 0.01 y 1.00, o usar: fácil / medio / difícil / porcentaje',
         );
       }
     }
 
+    // ✅ Snapshot BEFORE para auditoría
     const before = {
       id: current.id,
+      code: current.code,
+      projectId: current.projectId,
       name: current.name,
       status: current.status,
       cobertura: current.cobertura,
@@ -453,19 +503,51 @@ export class CotizacionesService {
       trabajoDeCampoCosto: current.trabajoDeCampoCosto,
     };
 
+    // ✅ Construir data con reglas (incluye el fix de code si cambia projectId)
+    const data: any = {
+      ...dto,
+      penetracionCategoria: penetracion ?? undefined,
+    };
+
+    // ✅ FIX 1: si cambió el proyecto -> regenerar code para evitar choque con @unique(code)
+    if (dto.projectId && dto.projectId !== current.projectId) {
+      // Validar que exista el proyecto destino
+      const project = await this.prisma.project.findUnique({
+        where: { id: dto.projectId },
+        select: { id: true },
+      });
+      if (!project) throw new NotFoundException('Proyecto destino no encontrado');
+
+      data.projectId = dto.projectId;
+      data.code = await this.generateCotizacionCode(dto.projectId);
+
+      // ✅ FIX 2 (recomendado): si tu schema tiene @@unique([projectId, name])
+      // y al mover de proyecto el name choca, lo hacemos único automáticamente.
+      const desiredName = dto.name ?? current.name;
+      const dup = await this.prisma.cotizacion.findFirst({
+        where: { projectId: dto.projectId, name: desiredName, NOT: { id } },
+        select: { id: true },
+      });
+      if (dup) {
+        data.name = await this.generateUniqueNameForProject(
+          dto.projectId,
+          desiredName,
+          id,
+        );
+      }
+    }
+
     await this.prisma.cotizacion.update({
       where: { id },
-      data: {
-        ...dto,
-        penetracionCategoria: penetracion ?? undefined,
-        projectId: dto.projectId ?? undefined,
-      },
+      data,
     });
 
     const after = await this.prisma.cotizacion.findUnique({
       where: { id },
       select: {
         id: true,
+        code: true,
+        projectId: true,
         name: true,
         status: true,
         cobertura: true,
@@ -497,7 +579,11 @@ export class CotizacionesService {
   // ------------------------------------------------------
   // CAMBIAR ESTADO
   // ------------------------------------------------------
-  async updateStatus(id: number, dto: UpdateCotizacionStatusDto, userId: number) {
+  async updateStatus(
+    id: number,
+    dto: UpdateCotizacionStatusDto,
+    userId: number,
+  ) {
     const current = await this.prisma.cotizacion.findUnique({
       where: { id },
       select: { createdById: true, status: true, code: true, name: true },
@@ -576,9 +662,19 @@ export class CotizacionesService {
     if (!cot) throw new NotFoundException('Cotización no encontrada');
 
     if (cot.status !== CotizacionStatus.APROBADO) {
-      throw new BadRequestException('Solo se pueden clonar cotizaciones aprobadas');
+      throw new BadRequestException(
+        'Solo se pueden clonar cotizaciones aprobadas',
+      );
     }
 
+    // ✅ Nombre único (si tu schema tiene @@unique([projectId, name]))
+    const baseName = `${cot.name} (copia)`;
+    const finalName = await this.generateUniqueNameForProject(
+      cot.projectId,
+      baseName,
+    );
+
+    // ✅ Código único
     const code = await this.generateCotizacionCode(cot.projectId);
 
     const nueva = await this.prisma.$transaction(async (tx) => {
@@ -586,7 +682,7 @@ export class CotizacionesService {
         data: {
           projectId: cot.projectId,
           contactoId: cot.contactoId,
-          name: `${cot.name} (copia)`,
+          name: finalName, // ✅ aquí
           code,
           status: CotizacionStatus.ENVIADO,
           createdById: userId,
@@ -620,6 +716,7 @@ export class CotizacionesService {
         select: { id: true, code: true },
       });
 
+      // ✅ Copiar items
       if (cot.items.length > 0) {
         await tx.cotizacionItem.createMany({
           data: cot.items.map((i) => ({
@@ -637,6 +734,7 @@ export class CotizacionesService {
         });
       }
 
+      // ✅ Copiar overrides de distribución
       if (cot.distribucionOverrides.length > 0) {
         await tx.cotizacionDistribucionOverride.createMany({
           data: cot.distribucionOverrides.map((o) => ({
@@ -670,14 +768,17 @@ export class CotizacionesService {
       entidadId: nueva.id,
       cotizacionId: nueva.id,
       performedById: userId,
-      metadata: this.toJson({ sourceCotizacionId: id, newCotizacionId: nueva.id }),
+      metadata: this.toJson({
+        sourceCotizacionId: id,
+        newCotizacionId: nueva.id,
+      }),
     });
 
     return this.findOne(nueva.id);
   }
 
   // ------------------------------------------------------
-  // DISTRIBUCIÓN GENÉRICA (AMSS o Nacional)
+  // DISTRIBUCIÓN GENÉRICA (AMSS / NACIONAL / URBANO)
   // ------------------------------------------------------
   async getDistribucion(cotizacionId: number) {
     const cot = await this.prisma.cotizacion.findUnique({
@@ -709,49 +810,54 @@ export class CotizacionesService {
       cot.penetracionCategoria > 1
         ? cot.penetracionCategoria / 100
         : cot.penetracionCategoria;
-  // ➜ ENGINE: URBANO (100% urbano) -> mismo pipeline de Nacional, solo cambia:
-  // 1) distribución base (porcentajes urbano)
-  // 2) desplazamientoMin = 45
-  if (cobertura === 'URBANO') {
-    let dist = distribuirEntrevistasUrbano(cot.totalEntrevistas, cot.tipoEntrevista);
 
-    const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
-      where: { cotizacionId },
-    });
-    dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
+    // ➜ ENGINE: URBANO (100% urbano) -> mismo pipeline de Nacional, solo cambia:
+    // 1) distribución base (porcentajes urbano)
+    // 2) desplazamientoMin = 45 (P125)
+    if (cobertura === 'URBANO') {
+      let dist = distribuirEntrevistasUrbano(
+        cot.totalEntrevistas,
+        cot.tipoEntrevista,
+      );
 
-    dist = aplicarRendimientoNacional(dist, {
-      duracionCuestionarioMin: cot.duracionCuestionarioMin,
-      penetracion: pen,
-      totalEncuestadores: cot.encuestadoresTotales,
-      segmentSize: 20,
-      filterMinutes: 2,
-      searchMinutes: 8,
-      desplazamientoMin: 45, // ✅ CAMBIO CLAVE URBANO (P125)
-      groupSize: 4,
-    });
+      const overrides =
+        await this.prisma.cotizacionDistribucionOverride.findMany({
+          where: { cotizacionId },
+        });
+      dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
 
-    dist = aplicarEncuestadoresYSupervisoresNacional(
-      dist,
-      cot.encuestadoresTotales,
-      { groupSize: 4, supervisorSplit: 4 },
-    );
+      dist = aplicarRendimientoNacional(dist, {
+        duracionCuestionarioMin: cot.duracionCuestionarioMin,
+        penetracion: pen,
+        totalEncuestadores: cot.encuestadoresTotales,
+        segmentSize: 20,
+        filterMinutes: 2,
+        searchMinutes: 8,
+        desplazamientoMin: 45, // ✅ CAMBIO CLAVE URBANO
+        groupSize: 4,
+      });
 
-    dist = aplicarDiasCampoYCostosNacional(dist);
-    dist = this.applyOverrides(dist, overrides, { lateOnly: true });
+      dist = aplicarEncuestadoresYSupervisoresNacional(
+        dist,
+        cot.encuestadoresTotales,
+        { groupSize: 4, supervisorSplit: 4 },
+      );
 
-    dist = aplicarPrecioBoletaNacional(dist, {
-      duracionCuestionarioMin: cot.duracionCuestionarioMin,
-      penetracion: pen,
-    });
+      dist = aplicarDiasCampoYCostosNacional(dist);
+      dist = this.applyOverrides(dist, overrides, { lateOnly: true });
 
-    dist = calcularTotalesViaticosTransporteHotelNacional(dist);
-    dist = calcularPagosPersonalNacional(dist);
+      dist = aplicarPrecioBoletaNacional(dist, {
+        duracionCuestionarioMin: cot.duracionCuestionarioMin,
+        penetracion: pen,
+      });
 
-    return dist;
-  }
+      dist = calcularTotalesViaticosTransporteHotelNacional(dist);
+      dist = calcularPagosPersonalNacional(dist);
 
-    // ➜ AMSS
+      return dist;
+    }
+
+    // ➜ ENGINE: AMSS
     if (cobertura === 'AMSS') {
       return buildDistribucionAMSS({
         totalEntrevistas: cot.totalEntrevistas,
@@ -767,13 +873,19 @@ export class CotizacionesService {
         clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
         numeroOlasBi: cot.numeroOlasBi ?? 2,
         trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
-        trabajoDeCampoTipo: cot.trabajoDeCampoTipo as 'propio' | 'subcontratado' | undefined,
+        trabajoDeCampoTipo: cot.trabajoDeCampoTipo as
+          | 'propio'
+          | 'subcontratado'
+          | undefined,
         trabajoDeCampoCosto: cot.trabajoDeCampoCosto ?? undefined,
       });
     }
 
-    // ➜ NACIONAL
-    let dist = distribuirEntrevistasNacional(cot.totalEntrevistas, cot.tipoEntrevista);
+    // ➜ ENGINE: NACIONAL
+    let dist = distribuirEntrevistasNacional(
+      cot.totalEntrevistas,
+      cot.tipoEntrevista,
+    );
 
     const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
       where: { cotizacionId },
@@ -818,7 +930,9 @@ export class CotizacionesService {
     return this.getDistribucion(cotizacionId);
   }
 
+  // ------------------------------------------------------
   // Aplica overrides en momentos distintos del pipeline
+  // ------------------------------------------------------
   private applyOverrides(
     base: DistribucionNacionalResult,
     overrides: Array<{
@@ -843,45 +957,60 @@ export class CotizacionesService {
     const late = Boolean(opts?.lateOnly);
 
     const map = new Map(overrides.map((o) => [o.departamento, o]));
-
     let totalDias = 0;
 
     const filas = base.filas.map((fila) => {
       const o = map.get(fila.departamento);
       const next: any = { ...fila };
 
-      // EARLY
+      // =========================
+      // EARLY (antes del pipeline)
+      // =========================
       if (!late && o) {
         if (o.urbano != null) next.urbano = Number(o.urbano);
         if (o.rural != null) next.rural = Number(o.rural);
 
         if (o.total != null) next.total = Number(o.total);
         else if (o.urbano != null || o.rural != null) {
-          next.total = (o.urbano ?? next.urbano ?? 0) + (o.rural ?? next.rural ?? 0);
+          next.total =
+            (o.urbano ?? next.urbano ?? 0) + (o.rural ?? next.rural ?? 0);
         }
 
-        if (o.horasEfectivas != null) next.horasEfectivas = Number(o.horasEfectivas);
-        if (o.tiempoEfectivoMin != null) next.tiempoEfectivoMin = Number(o.tiempoEfectivoMin);
+        if (o.horasEfectivas != null)
+          next.horasEfectivas = Number(o.horasEfectivas);
+        if (o.tiempoEfectivoMin != null)
+          next.tiempoEfectivoMin = Number(o.tiempoEfectivoMin);
       }
 
-      // LATE
+      // =========================
+      // LATE (después del pipeline)
+      // =========================
       if (!early && o) {
         if (o.rendimiento != null) next.rendimiento = Number(o.rendimiento);
-        if (o.encuestadores != null) next.encuestadores = Number(o.encuestadores);
-        if (o.supervisores != null) next.supervisores = Number(o.supervisores);
-        if (o.diasCampoEncuest != null) next.diasCampoEncuest = Number(o.diasCampoEncuest);
+        if (o.encuestadores != null)
+          next.encuestadores = Number(o.encuestadores);
+        if (o.supervisores != null)
+          next.supervisores = Number(o.supervisores);
+        if (o.diasCampoEncuest != null)
+          next.diasCampoEncuest = Number(o.diasCampoEncuest);
 
         if (o.viaticosUnit != null) next.viaticosUnit = Number(o.viaticosUnit);
-        if (o.tMicrobusUnit != null) next.tMicrobusUnit = Number(o.tMicrobusUnit);
+        if (o.tMicrobusUnit != null)
+          next.tMicrobusUnit = Number(o.tMicrobusUnit);
         if (o.hotelUnit != null) next.hotelUnit = Number(o.hotelUnit);
 
         if (o.precioBoleta != null) next.precioBoleta = Number(o.precioBoleta);
       }
 
+      // =========================
       // Fórmula Excel días campo:
       // =IFERROR((Q/(T*U))*1.05," ")
+      // =========================
       if (!early) {
-        if (o?.diasCampoEncuest == null && (next.diasCampoEncuest == null || next.diasCampoEncuest === 0)) {
+        if (
+          o?.diasCampoEncuest == null &&
+          (next.diasCampoEncuest == null || next.diasCampoEncuest === 0)
+        ) {
           const Q = Number(next.total ?? 0);
           const T = Number(next.rendimiento ?? 0);
           const U = Number(next.encuestadores ?? 0);
@@ -890,7 +1019,11 @@ export class CotizacionesService {
           }
         }
 
-        if (typeof next.diasCampoEncuest === 'number' && Number.isFinite(next.diasCampoEncuest)) {
+        // ✅ siempre sumar días
+        if (
+          typeof next.diasCampoEncuest === 'number' &&
+          Number.isFinite(next.diasCampoEncuest)
+        ) {
           totalDias += next.diasCampoEncuest;
         }
       }
@@ -901,6 +1034,7 @@ export class CotizacionesService {
     return {
       ...base,
       filas,
+      // Solo recalculamos el total global en el paso LATE
       totalDiasCampoEncuestGlobal:
         !early && late ? Math.ceil(totalDias) : base.totalDiasCampoEncuestGlobal,
     };
@@ -929,6 +1063,7 @@ export class CotizacionesService {
       );
     }
 
+    // Guardar overrides por fila (upsert)
     await this.prisma.$transaction(async (tx) => {
       for (const row of dto.rows) {
         const { departamento, ...rest } = row as any;
@@ -942,6 +1077,7 @@ export class CotizacionesService {
       }
     });
 
+    // Recalcular Trabajo de Campo + dependientes desde la nueva distribución
     await this.recalcularTrabajoCampoYRecursosDesdeDistribucion(cotizacionId);
 
     await this.auditoria.log({
@@ -954,6 +1090,7 @@ export class CotizacionesService {
       metadata: this.toJson({ rows: dto.rows }),
     });
 
+    // Devolver tabla final ya recalculada (completa)
     return this.getDistribucionNacional(cotizacionId);
   }
 
@@ -993,7 +1130,7 @@ export class CotizacionesService {
   }
 
   // ------------------------------------------------------
-  // Recalcular Trabajo de Campo + Recursos + Dirección
+  // Recalcular Trabajo de Campo + Recursos + Dirección (afectados por distribución)
   // ------------------------------------------------------
   private async recalcularTrabajoCampoYRecursosDesdeDistribucion(
     cotizacionId: number,
@@ -1016,27 +1153,35 @@ export class CotizacionesService {
     });
     if (!cot) throw new NotFoundException('Cotización no encontrada');
 
+    // Solo recalcular si el trabajo de campo es propio
     if (!cot.trabajoDeCampoRealiza || cot.trabajoDeCampoTipo !== 'propio') return;
 
+    // 1) Distribución final (ya con overrides)
     const dist: any = await this.getDistribucion(cotizacionId);
 
     const diasCampo = Math.max(
       0,
       Math.round((dist.totalDiasCampoEncuestGlobal ?? 0) * 100) / 100,
     );
-    const totalViaticos = Math.round((dist.totalViaticosGlobal ?? 0) * 100) / 100;
-    const totalTransporte = Math.round((dist.totalTMicrobusGlobal ?? 0) * 100) / 100;
+    const totalViaticos =
+      Math.round((dist.totalViaticosGlobal ?? 0) * 100) / 100;
+    const totalTransporte =
+      Math.round((dist.totalTMicrobusGlobal ?? 0) * 100) / 100;
     const totalHotel = Math.round((dist.totalHotelGlobal ?? 0) * 100) / 100;
-    const totalPagoEncuestadores = Math.round((dist.totalPagoEncuestadoresGlobal ?? 0) * 100) / 100;
-    const totalPagoSupervisores = Math.round((dist.totalPagoSupervisoresGlobal ?? 0) * 100) / 100;
+    const totalPagoEncuestadores =
+      Math.round((dist.totalPagoEncuestadoresGlobal ?? 0) * 100) / 100;
+    const totalPagoSupervisores =
+      Math.round((dist.totalPagoSupervisoresGlobal ?? 0) * 100) / 100;
 
     const fC = Number(cot.factorComisionablePct ?? 1);
     const fNC = Number(cot.factorNoComisionablePct ?? 0.05);
-    const totalPersonasCampo = Number(cot.encuestadoresTotales) + Number(cot.supervisores);
+    const totalPersonasCampo =
+      Number(cot.encuestadoresTotales) + Number(cot.supervisores);
 
     const withCom = (base: number, comisionable: boolean) =>
       Math.round(base * (comisionable ? 1 + fC : 1 + fNC) * 100) / 100;
 
+    // 2) Buscar ítems a impactar
     const items = await this.prisma.cotizacionItem.findMany({
       where: { cotizacionId },
       select: {
@@ -1054,8 +1199,10 @@ export class CotizacionesService {
     const find = (cat: string, desc: string) =>
       items.find((i) => i.category === cat && i.description === desc);
 
-    const updates: Array<ReturnType<typeof this.prisma.cotizacionItem.update>> = [];
+    const updates: Array<ReturnType<typeof this.prisma.cotizacionItem.update>> =
+      [];
 
+    // Dirección Trabajo Campo
     const itDirCampo = find('TRABAJO DE CAMPO', 'Dirección Trabajo Campo');
     if (itDirCampo) {
       const personas = 1;
@@ -1076,6 +1223,7 @@ export class CotizacionesService {
       );
     }
 
+    // Capacitación
     const itCap = find('TRABAJO DE CAMPO', 'Capacitación');
     if (itCap) {
       const personas = totalPersonasCampo;
@@ -1096,6 +1244,7 @@ export class CotizacionesService {
       );
     }
 
+    // Supervisor (prorrateado)
     const itSup = find('TRABAJO DE CAMPO', 'Supervisor');
     if (itSup) {
       const personas = Number(cot.supervisores);
@@ -1119,6 +1268,7 @@ export class CotizacionesService {
       );
     }
 
+    // Encuestadores (prorrateado)
     const itEnc = find('TRABAJO DE CAMPO', 'Encuestadores');
     if (itEnc) {
       const personas = Number(cot.encuestadoresTotales);
@@ -1142,6 +1292,7 @@ export class CotizacionesService {
       );
     }
 
+    // Viáticos (prorrateado)
     const itVia = find('TRABAJO DE CAMPO', 'Viáticos');
     if (itVia) {
       const personas = totalPersonasCampo;
@@ -1165,6 +1316,7 @@ export class CotizacionesService {
       );
     }
 
+    // Transporte (prorrateado)
     const itTrans = find('TRABAJO DE CAMPO', 'Transporte');
     if (itTrans) {
       const personas = totalPersonasCampo;
@@ -1188,6 +1340,7 @@ export class CotizacionesService {
       );
     }
 
+    // Hotel (prorrateado; no comisionable)
     const itHotel = find('TRABAJO DE CAMPO', 'Hotel');
     if (itHotel) {
       const personas = totalPersonasCampo;
@@ -1205,12 +1358,13 @@ export class CotizacionesService {
             dias,
             costoUnitario: unit,
             costoTotal: base,
-            totalConComision: withCom(base, false),
+            totalConComision: withCom(base, false), // no comisionable
           },
         }),
       );
     }
 
+    // 3) RECURSOS dependientes de días de campo
     const itTelCampo = find('RECURSOS', 'Teléfono celular (campo)');
     if (itTelCampo) {
       const personas = totalPersonasCampo;
@@ -1271,14 +1425,16 @@ export class CotizacionesService {
       );
     }
 
+    // 4) DIRECCIÓN → Días director (regla del builder)
     const itDiasDir = items.find(
       (i) => i.category === 'DIRECCIÓN' && i.description === 'Días director',
     );
     if (itDiasDir) {
+      // horasTotales = 4 + (2 * diasCampo)
       const tarifa = Number(itDiasDir.costoUnitario ?? 10);
       const horasTotales = 4 + 2 * diasCampo;
       const base = Math.round(horasTotales * tarifa * 100) / 100;
-      const totalConCom = Math.round((base / 0.4) * 100) / 100;
+      const totalConCom = Math.round((base / 0.4) * 100) / 100; // margen base 0.4
       updates.push(
         this.prisma.cotizacionItem.update({
           where: { id: itDiasDir.id },
@@ -1293,6 +1449,7 @@ export class CotizacionesService {
       );
     }
 
+    // Ejecutar updates y recalcular totales de la cotización
     await this.prisma.$transaction(updates);
 
     const suma = await this.prisma.cotizacionItem.aggregate({
@@ -1308,7 +1465,8 @@ export class CotizacionesService {
 
     const cpe =
       (cotFull?.totalEntrevistas ?? 0) > 0
-        ? Math.round((totalCobrar / Number(cotFull!.totalEntrevistas)) * 100) / 100
+        ? Math.round((totalCobrar / Number(cotFull!.totalEntrevistas)) * 100) /
+          100
         : 0;
 
     await this.prisma.cotizacion.update({
@@ -1336,6 +1494,7 @@ export class CotizacionesService {
     },
     userId: number,
   ) {
+    // 1) Cargar cotización para permisos y factores
     const cot = await this.prisma.cotizacion.findUnique({
       where: { id: cotizacionId },
       select: {
@@ -1365,6 +1524,7 @@ export class CotizacionesService {
       );
     }
 
+    // 2) Cargar ítem
     const item = await this.prisma.cotizacionItem.findUnique({
       where: { id: itemId },
       select: {
@@ -1388,13 +1548,15 @@ export class CotizacionesService {
 
     const beforeItem = item;
 
+    // 3) Determinar valores base
     const personas = dto.personas ?? ((item.personas as any) as number | null);
     const dias = dto.dias ?? ((item.dias as any) as number | null);
-    const costoUnitario = dto.costoUnitario ?? ((item.costoUnitario as any) as number | null);
+    const costoUnitario =
+      dto.costoUnitario ?? ((item.costoUnitario as any) as number | null);
     const comisionable = dto.comisionable ?? item.comisionable;
 
-    const fC = Number(cot.factorComisionablePct ?? 1);
-    const fNC = Number(cot.factorNoComisionablePct ?? 0.05);
+    const fC = Number(cot.factorComisionablePct ?? 1); // p.ej. 1 = +100%
+    const fNC = Number(cot.factorNoComisionablePct ?? 0.05); // p.ej. 0.05 = +5%
     const factor = comisionable ? 1 + fC : 1 + fNC;
 
     let costoTotal: number | null | undefined =
@@ -1409,7 +1571,9 @@ export class CotizacionesService {
     const envioCostoTotal = dto.costoTotal !== undefined;
     const envioTotalConCom = dto.totalConComision !== undefined;
 
+    // 4) Reglas de recálculo
     if (envioPersonasDiasUnit) {
+      // personas*dias*unit → costoTotal → totalConComision
       if (personas != null && dias != null && costoUnitario != null) {
         costoTotal = Number(personas) * Number(dias) * Number(costoUnitario);
       } else {
@@ -1417,13 +1581,18 @@ export class CotizacionesService {
       }
       totalConComision = costoTotal != null ? Number(costoTotal) * factor : null;
     } else if (envioCostoTotal) {
-      totalConComision = costoTotal != null ? Number(costoTotal) * factor : null;
+      totalConComision =
+        costoTotal != null ? Number(costoTotal) * factor : null;
     } else if (envioTotalConCom) {
-      costoTotal = totalConComision != null ? Number(totalConComision) / factor : null;
+      costoTotal =
+        totalConComision != null ? Number(totalConComision) / factor : null;
     } else {
-      if (costoTotal != null) totalConComision = Number(costoTotal) * factor;
+      if (costoTotal != null) {
+        totalConComision = Number(costoTotal) * factor;
+      }
     }
 
+    // Redondeos a 2 decimales
     const r2 = (v: number | null | undefined) =>
       v == null ? null : Math.round(Number(v) * 100) / 100;
 
@@ -1438,6 +1607,7 @@ export class CotizacionesService {
 
     let afterItem: any = null;
 
+    // 5) Persistir y recalcular totales cotización
     await this.prisma.$transaction(async (tx) => {
       afterItem = await tx.cotizacionItem.update({
         where: { id: itemId },
@@ -1478,6 +1648,7 @@ export class CotizacionesService {
       });
     });
 
+    // ✅ Auditoría: editar ítem
     await this.auditoria.log({
       accion: 'EDITAR_ITEM_COTIZACION',
       descripcion: `Editó ítem #${itemId} de cotización #${cotizacionId}`,
@@ -1492,6 +1663,7 @@ export class CotizacionesService {
       }),
     });
 
+    // 6) Devolver la cotización completa
     return this.findOne(cotizacionId);
   }
 
@@ -1516,11 +1688,15 @@ export class CotizacionesService {
     }
 
     if (cotizacion.status === CotizacionStatus.APROBADO) {
-      throw new BadRequestException('No se puede eliminar una cotización aprobada');
+      throw new BadRequestException(
+        'No se puede eliminar una cotización aprobada',
+      );
     }
 
     if (cotizacion.createdById !== userId) {
-      throw new ForbiddenException('Solo el creador puede eliminar la cotización');
+      throw new ForbiddenException(
+        'Solo el creador puede eliminar la cotización',
+      );
     }
 
     await this.prisma.cotizacion.delete({ where: { id } });
@@ -1538,7 +1714,9 @@ export class CotizacionesService {
     return { message: 'Cotización eliminada correctamente' };
   }
 
-  // Todas las cotizaciones
+  // ------------------------------------------------------
+  // LISTAR TODAS
+  // ------------------------------------------------------
   async findAll() {
     return this.prisma.cotizacion.findMany({
       orderBy: { createdAt: 'desc' },
@@ -1643,9 +1821,12 @@ export class CotizacionesService {
       metodologia:
         dto.metodologia !== undefined ? dto.metodologia : current.metodologia,
       incentivoTotal:
-        dto.incentivoTotal !== undefined ? dto.incentivoTotal : current.incentivoTotal,
+        dto.incentivoTotal !== undefined
+          ? dto.incentivoTotal
+          : current.incentivoTotal,
     };
 
+    // Validación cualitativo
     if (
       String(merged.studyType ?? '').toLowerCase() === 'cualitativo' &&
       !merged.metodologia
@@ -1655,6 +1836,7 @@ export class CotizacionesService {
       );
     }
 
+    // Validación trabajo de campo
     const tdcRealiza = merged.trabajoDeCampoRealiza === true;
     const tdcTipo = merged.trabajoDeCampoTipo ?? null;
 
@@ -1673,6 +1855,7 @@ export class CotizacionesService {
       }
     }
 
+    // Normalizar penetración (0..1)
     let penetracion: number;
     const penIn = merged.penetracionCategoria as any;
 
@@ -1745,7 +1928,8 @@ export class CotizacionesService {
           trabajoDeCampoRealiza: Boolean(merged.trabajoDeCampoRealiza),
           trabajoDeCampoTipo: merged.trabajoDeCampoTipo ?? null,
           trabajoDeCampoCosto:
-            merged.trabajoDeCampoCosto === null || merged.trabajoDeCampoCosto === undefined
+            merged.trabajoDeCampoCosto === null ||
+            merged.trabajoDeCampoCosto === undefined
               ? null
               : Number(merged.trabajoDeCampoCosto),
 
@@ -1813,6 +1997,7 @@ export class CotizacionesService {
       });
     });
 
+    // ✅ Sincroniza ítems dependientes de días con distribución real (AMSS/Nacional/URBANO)
     await this.recalcularTrabajoCampoYRecursosDesdeDistribucion(cotizacionId);
 
     await this.auditoria.log({
@@ -1833,7 +2018,9 @@ export class CotizacionesService {
     return this.getFullSnapshot(cotizacionId);
   }
 
-  // Cotizaciones creadas por un usuario
+  // ------------------------------------------------------
+  // LISTAR POR USUARIO
+  // ------------------------------------------------------
   async findByUser(userId: number) {
     return this.prisma.cotizacion.findMany({
       where: { createdById: userId },
@@ -1867,6 +2054,9 @@ export class CotizacionesService {
     });
   }
 
+  // ------------------------------------------------------
+  // LISTAR POR CLIENTE
+  // ------------------------------------------------------
   async findByCliente(clienteId: number) {
     return this.prisma.cotizacion.findMany({
       where: {
@@ -1900,6 +2090,9 @@ export class CotizacionesService {
     });
   }
 
+  // ------------------------------------------------------
+  // STATS
+  // ------------------------------------------------------
   async countAll() {
     const total = await this.prisma.cotizacion.count();
     return { total };
