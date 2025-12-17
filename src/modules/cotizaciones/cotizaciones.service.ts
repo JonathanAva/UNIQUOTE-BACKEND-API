@@ -1,5 +1,3 @@
-// src/modules/cotizaciones/cotizaciones.service.ts
-
 import {
   BadRequestException,
   ForbiddenException,
@@ -8,22 +6,20 @@ import {
 } from '@nestjs/common';
 import { Prisma, CotizacionStatus } from '@prisma/client';
 import { PrismaService } from '@/infra/database/prisma.service';
-import {
-  CreateCotizacionDto,
-  TrabajoDeCampoTipo,
-} from './dto/create-cotizacion.dto';
+import { CreateCotizacionDto, TrabajoDeCampoTipo } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { UpdateCotizacionStatusDto } from './dto/update-cotizacion-status.dto';
 import { buildCotizacionCasaPorCasa } from './builder/casa por casa/nacional.builder';
 import { UpdateDistribucionDto } from './dto/update-distribucion.dto';
 import { ConstantesService } from '@/modules/constantes/constantes.service';
 import { RebuildCotizacionDto } from './dto/rebuild-cotizacion.dto';
+
+import { PUNTO_AFLUENCIA_NACIONAL_RENDIMIENTO } from '@/modules/cotizaciones/engine/Punto de afluencia/nacional.engine';
+
 import { buildDistribucionAMSS } from '@/modules/cotizaciones/engine/casa-por-casa/amss.engine';
 import { distribuirEntrevistasUrbano } from '@/modules/cotizaciones/engine/casa-por-casa/urbano.engine';
 import { distribuirEntrevistasCiudadesPrincipales } from '@/modules/cotizaciones/engine/casa-por-casa/ciudades-principales.engine';
 
-
-// ✅ Pipeline por pasos para permitir overrides persistentes
 import {
   distribuirEntrevistasNacional,
   aplicarRendimientoNacional,
@@ -36,6 +32,7 @@ import {
 } from '@/modules/cotizaciones/engine/casa-por-casa/nacional.engine';
 
 import { AuditoriaService } from '@/modules/auditoria/auditoria.service';
+
 
 @Injectable()
 export class CotizacionesService {
@@ -782,158 +779,96 @@ export class CotizacionesService {
   // ------------------------------------------------------
   // DISTRIBUCIÓN GENÉRICA (AMSS / NACIONAL / URBANO)
   // ------------------------------------------------------
-  async getDistribucion(cotizacionId: number) {
-    const cot = await this.prisma.cotizacion.findUnique({
-      where: { id: cotizacionId },
-      select: {
-        id: true,
-        cobertura: true,
-        studyType: true,
-        trabajoDeCampoRealiza: true,
-        trabajoDeCampoTipo: true,
-        trabajoDeCampoCosto: true,
-        totalEntrevistas: true,
-        duracionCuestionarioMin: true,
-        tipoEntrevista: true,
-        penetracionCategoria: true,
-        supervisores: true,
-        encuestadoresTotales: true,
-        realizamosCuestionario: true,
-        realizamosScript: true,
-        clienteSolicitaReporte: true,
-        clienteSolicitaInformeBI: true,
-        numeroOlasBi: true,
-      },
+async getDistribucion(cotizacionId: number) {
+  const cot = await this.prisma.cotizacion.findUnique({
+    where: { id: cotizacionId },
+    select: {
+      id: true,
+      cobertura: true,
+      studyType: true,
+      metodologia: true, // ✅ IMPORTANTE
+      trabajoDeCampoRealiza: true,
+      trabajoDeCampoTipo: true,
+      trabajoDeCampoCosto: true,
+      totalEntrevistas: true,
+      duracionCuestionarioMin: true,
+      tipoEntrevista: true,
+      penetracionCategoria: true,
+      supervisores: true,
+      encuestadoresTotales: true,
+      realizamosCuestionario: true,
+      realizamosScript: true,
+      clienteSolicitaReporte: true,
+      clienteSolicitaInformeBI: true,
+      numeroOlasBi: true,
+    },
+  });
+
+  if (!cot) throw new NotFoundException('Cotización no encontrada');
+
+  const cobertura = (cot.cobertura ?? '').toUpperCase();
+  const pen =
+    cot.penetracionCategoria > 1
+      ? cot.penetracionCategoria / 100
+      : cot.penetracionCategoria;
+
+  // ✅ Detectar "Punto de afluencia" (robusto)
+  const esPuntoAfluencia = String(cot.metodologia ?? '')
+    .toLowerCase()
+    .includes('afluencia');
+
+  // ✅ Casa por casa usa 8; Punto de afluencia usa 2
+  const searchMinutes = esPuntoAfluencia
+    ? PUNTO_AFLUENCIA_NACIONAL_RENDIMIENTO.searchMinutes // 2
+    : 8;
+
+  // ➜ ENGINE: URBANO
+  if (cobertura === 'URBANO') {
+    let dist = distribuirEntrevistasUrbano(cot.totalEntrevistas, cot.tipoEntrevista);
+
+    const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
+      where: { cotizacionId },
     });
-    if (!cot) throw new NotFoundException('Cotización no encontrada');
+    dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
 
-    const cobertura = (cot.cobertura ?? '').toUpperCase();
-    const pen =
-      cot.penetracionCategoria > 1
-        ? cot.penetracionCategoria / 100
-        : cot.penetracionCategoria;
+    dist = aplicarRendimientoNacional(dist, {
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      penetracion: pen,
+      totalEncuestadores: cot.encuestadoresTotales,
+      segmentSize: 20,
+      filterMinutes: 2,
+      searchMinutes, // ✅ aquí
+      desplazamientoMin: 45,
+      groupSize: 4,
+    });
 
-    // ➜ ENGINE: URBANO (100% urbano) -> mismo pipeline de Nacional, solo cambia:
-    // 1) distribución base (porcentajes urbano)
-    // 2) desplazamientoMin = 45 (P125)
-    if (cobertura === 'URBANO') {
-      let dist = distribuirEntrevistasUrbano(
-        cot.totalEntrevistas,
-        cot.tipoEntrevista,
-      );
+    dist = aplicarEncuestadoresYSupervisoresNacional(dist, cot.encuestadoresTotales, {
+      groupSize: 4,
+      supervisorSplit: 4,
+    });
 
-      const overrides =
-        await this.prisma.cotizacionDistribucionOverride.findMany({
-          where: { cotizacionId },
-        });
-      dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
+    dist = aplicarDiasCampoYCostosNacional(dist);
+    dist = this.applyOverrides(dist, overrides, { lateOnly: true });
 
-      dist = aplicarRendimientoNacional(dist, {
-        duracionCuestionarioMin: cot.duracionCuestionarioMin,
-        penetracion: pen,
-        totalEncuestadores: cot.encuestadoresTotales,
-        segmentSize: 20,
-        filterMinutes: 2,
-        searchMinutes: 8,
-        desplazamientoMin: 45, // ✅ CAMBIO CLAVE URBANO
-        groupSize: 4,
-      });
+    dist = aplicarPrecioBoletaNacional(dist, {
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      penetracion: pen,
+    });
 
-      dist = aplicarEncuestadoresYSupervisoresNacional(
-        dist,
-        cot.encuestadoresTotales,
-        { groupSize: 4, supervisorSplit: 4 },
-      );
+    dist = calcularTotalesViaticosTransporteHotelNacional(dist);
+    dist = calcularPagosPersonalNacional(dist);
 
-      dist = aplicarDiasCampoYCostosNacional(dist);
-      dist = this.applyOverrides(dist, overrides, { lateOnly: true });
+    return dist;
+  }
 
-      dist = aplicarPrecioBoletaNacional(dist, {
-        duracionCuestionarioMin: cot.duracionCuestionarioMin,
-        penetracion: pen,
-      });
-
-      dist = calcularTotalesViaticosTransporteHotelNacional(dist);
-      dist = calcularPagosPersonalNacional(dist);
-
-      return dist;
-    }
-
-    // ➜ ENGINE: CIUDADES PRINCIPALES (50% urbano / 50% rural)
-if (
-  cobertura === 'CIU_PRINCIPALES' ||
-  cobertura === 'CIUDADES_PRINCIPALES' ||
-  cobertura === 'CIUDADES PRINCIPALES' ||
-  cobertura === 'CIU. PRINCIPALES'
-) {
-  let dist = distribuirEntrevistasCiudadesPrincipales(
-    cot.totalEntrevistas,
-    cot.tipoEntrevista,
-  );
-
-  const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
-    where: { cotizacionId },
-  });
-  dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
-
-  dist = aplicarRendimientoNacional(dist, {
-    duracionCuestionarioMin: cot.duracionCuestionarioMin,
-    penetracion: pen,
-    totalEncuestadores: cot.encuestadoresTotales,
-    segmentSize: 20,
-    filterMinutes: 2,
-    searchMinutes: 8,
-    desplazamientoMin: 60, // ✅ aquí vuelve a 60
-    groupSize: 4,
-  });
-
-  dist = aplicarEncuestadoresYSupervisoresNacional(
-    dist,
-    cot.encuestadoresTotales,
-    { groupSize: 4, supervisorSplit: 4 },
-  );
-
-  dist = aplicarDiasCampoYCostosNacional(dist);
-  dist = this.applyOverrides(dist, overrides, { lateOnly: true });
-
-  dist = aplicarPrecioBoletaNacional(dist, {
-    duracionCuestionarioMin: cot.duracionCuestionarioMin,
-    penetracion: pen,
-  });
-
-  dist = calcularTotalesViaticosTransporteHotelNacional(dist);
-  dist = calcularPagosPersonalNacional(dist);
-
-  return dist;
-}
-
-
-    // ➜ ENGINE: AMSS
-    if (cobertura === 'AMSS') {
-      return buildDistribucionAMSS({
-        totalEntrevistas: cot.totalEntrevistas,
-        duracionCuestionarioMin: cot.duracionCuestionarioMin,
-        tipoEntrevista: cot.tipoEntrevista,
-        penetracionCategoria: pen,
-        cobertura: cot.cobertura,
-        supervisores: cot.supervisores,
-        encuestadoresTotales: cot.encuestadoresTotales,
-        realizamosCuestionario: cot.realizamosCuestionario,
-        realizamosScript: cot.realizamosScript,
-        clienteSolicitaReporte: cot.clienteSolicitaReporte,
-        clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
-        numeroOlasBi: cot.numeroOlasBi ?? 2,
-        trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
-        trabajoDeCampoTipo: cot.trabajoDeCampoTipo as
-          | 'propio'
-          | 'subcontratado'
-          | undefined,
-        trabajoDeCampoCosto: cot.trabajoDeCampoCosto ?? undefined,
-      });
-    }
-
-    // ➜ ENGINE: NACIONAL
-    let dist = distribuirEntrevistasNacional(
+  // ➜ ENGINE: CIUDADES PRINCIPALES
+  if (
+    cobertura === 'CIU_PRINCIPALES' ||
+    cobertura === 'CIUDADES_PRINCIPALES' ||
+    cobertura === 'CIUDADES PRINCIPALES' ||
+    cobertura === 'CIU. PRINCIPALES'
+  ) {
+    let dist = distribuirEntrevistasCiudadesPrincipales(
       cot.totalEntrevistas,
       cot.tipoEntrevista,
     );
@@ -949,16 +884,15 @@ if (
       totalEncuestadores: cot.encuestadoresTotales,
       segmentSize: 20,
       filterMinutes: 2,
-      searchMinutes: 8,
+      searchMinutes, // ✅ aquí
       desplazamientoMin: 60,
       groupSize: 4,
     });
 
-    dist = aplicarEncuestadoresYSupervisoresNacional(
-      dist,
-      cot.encuestadoresTotales,
-      { groupSize: 4, supervisorSplit: 4 },
-    );
+    dist = aplicarEncuestadoresYSupervisoresNacional(dist, cot.encuestadoresTotales, {
+      groupSize: 4,
+      supervisorSplit: 4,
+    });
 
     dist = aplicarDiasCampoYCostosNacional(dist);
     dist = this.applyOverrides(dist, overrides, { lateOnly: true });
@@ -973,6 +907,66 @@ if (
 
     return dist;
   }
+
+  // ➜ ENGINE: AMSS
+  if (cobertura === 'AMSS') {
+    return buildDistribucionAMSS({
+      totalEntrevistas: cot.totalEntrevistas,
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      tipoEntrevista: cot.tipoEntrevista,
+      penetracionCategoria: pen,
+      cobertura: cot.cobertura,
+      supervisores: cot.supervisores,
+      encuestadoresTotales: cot.encuestadoresTotales,
+      realizamosCuestionario: cot.realizamosCuestionario,
+      realizamosScript: cot.realizamosScript,
+      clienteSolicitaReporte: cot.clienteSolicitaReporte,
+      clienteSolicitaInformeBI: cot.clienteSolicitaInformeBI,
+      numeroOlasBi: cot.numeroOlasBi ?? 2,
+      trabajoDeCampoRealiza: cot.trabajoDeCampoRealiza,
+      trabajoDeCampoTipo: cot.trabajoDeCampoTipo as 'propio' | 'subcontratado' | undefined,
+      trabajoDeCampoCosto: cot.trabajoDeCampoCosto ?? undefined,
+    });
+  }
+
+  // ➜ ENGINE: NACIONAL
+  let dist = distribuirEntrevistasNacional(cot.totalEntrevistas, cot.tipoEntrevista);
+
+  const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
+    where: { cotizacionId },
+  });
+  dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
+
+  dist = aplicarRendimientoNacional(dist, {
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    penetracion: pen,
+    totalEncuestadores: cot.encuestadoresTotales,
+    segmentSize: 20,
+    filterMinutes: 2,
+    searchMinutes, // ✅ aquí (NACIONAL)
+    desplazamientoMin: 60,
+    groupSize: 4,
+  });
+
+  dist = aplicarEncuestadoresYSupervisoresNacional(dist, cot.encuestadoresTotales, {
+    groupSize: 4,
+    supervisorSplit: 4,
+  });
+
+  dist = aplicarDiasCampoYCostosNacional(dist);
+  dist = this.applyOverrides(dist, overrides, { lateOnly: true });
+
+  dist = aplicarPrecioBoletaNacional(dist, {
+    duracionCuestionarioMin: cot.duracionCuestionarioMin,
+    penetracion: pen,
+  });
+
+  dist = calcularTotalesViaticosTransporteHotelNacional(dist);
+  dist = calcularPagosPersonalNacional(dist);
+
+  return dist;
+}
+
 
   // ------------------------------------------------------
   // DISTRIBUCIÓN NACIONAL (compat) -> usa genérico
