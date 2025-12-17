@@ -48,19 +48,19 @@ export class CreateCotizacionDto {
   @IsInt()
   projectId: number;
 
-  @ApiProperty({ example: 3, required: false, description: 'ID del contacto dentro del cliente (opcional)' })
+  @ApiProperty({ example: 1, required: false, description: 'ID del contacto dentro del cliente (opcional)' })
   @IsOptional()
   @IsInt()
   contactoId?: number;
 
-  @ApiProperty({ example: 'Cotización Pizza Hawaiana 2025', description: 'Nombre de la cotización' })
+  @ApiProperty({ example: 'prueba de cotizacion', description: 'Nombre de la cotización' })
   @IsString()
   @IsNotEmpty()
   name: string;
 
   @ApiProperty({
     enum: StudyTypeEnum,
-    example: StudyTypeEnum.CUALITATIVO,
+    example: StudyTypeEnum.CUANTITATIVO,
     description: 'Tipo de estudio: Cualitativo o Cuantitativo',
   })
   @IsString()
@@ -130,7 +130,7 @@ export class CreateCotizacionDto {
   @IsString()
   tipoEntrevista: string;
 
-  @ApiProperty({ example: 100, description: 'Penetración de la categoría en porcentaje' })
+  @ApiProperty({ example: 1, description: 'Penetración de la categoría en porcentaje' })
   @Min(0.01)
   @Max(1)
   penetracionCategoria: string | number;

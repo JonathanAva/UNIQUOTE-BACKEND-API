@@ -14,6 +14,7 @@ import { UpdateDistribucionDto } from './dto/update-distribucion.dto';
 import { ConstantesService } from '@/modules/constantes/constantes.service';
 import { RebuildCotizacionDto } from './dto/rebuild-cotizacion.dto';
 import { buildDistribucionAMSS } from '@/modules/cotizaciones/engine/casa-por-casa/amss.engine';
+import { distribuirEntrevistasUrbano } from '@/modules/cotizaciones/engine/casa-por-casa/urbano.engine';
 
 // ✅ Pipeline por pasos para permitir overrides persistentes
 import {
@@ -708,6 +709,47 @@ export class CotizacionesService {
       cot.penetracionCategoria > 1
         ? cot.penetracionCategoria / 100
         : cot.penetracionCategoria;
+  // ➜ ENGINE: URBANO (100% urbano) -> mismo pipeline de Nacional, solo cambia:
+  // 1) distribución base (porcentajes urbano)
+  // 2) desplazamientoMin = 45
+  if (cobertura === 'URBANO') {
+    let dist = distribuirEntrevistasUrbano(cot.totalEntrevistas, cot.tipoEntrevista);
+
+    const overrides = await this.prisma.cotizacionDistribucionOverride.findMany({
+      where: { cotizacionId },
+    });
+    dist = this.applyOverrides(dist, overrides, { earlyOnly: true });
+
+    dist = aplicarRendimientoNacional(dist, {
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      penetracion: pen,
+      totalEncuestadores: cot.encuestadoresTotales,
+      segmentSize: 20,
+      filterMinutes: 2,
+      searchMinutes: 8,
+      desplazamientoMin: 45, // ✅ CAMBIO CLAVE URBANO (P125)
+      groupSize: 4,
+    });
+
+    dist = aplicarEncuestadoresYSupervisoresNacional(
+      dist,
+      cot.encuestadoresTotales,
+      { groupSize: 4, supervisorSplit: 4 },
+    );
+
+    dist = aplicarDiasCampoYCostosNacional(dist);
+    dist = this.applyOverrides(dist, overrides, { lateOnly: true });
+
+    dist = aplicarPrecioBoletaNacional(dist, {
+      duracionCuestionarioMin: cot.duracionCuestionarioMin,
+      penetracion: pen,
+    });
+
+    dist = calcularTotalesViaticosTransporteHotelNacional(dist);
+    dist = calcularPagosPersonalNacional(dist);
+
+    return dist;
+  }
 
     // ➜ AMSS
     if (cobertura === 'AMSS') {
